@@ -1,0 +1,299 @@
+{{define "todo-renderer"}}
+class TodoRenderer {
+  constructor(api, toast, app) {
+    this.api = api;
+    this.toast = toast;
+    this.app = app;
+  }
+
+  renderList(allTodos, showCompleted, showDetails, search, selectedTagFilters, tagGroupNames) {
+    // Preserve in-progress form input values during re-render
+    let preservedId = null, preservedValue = null;
+    const ae = document.activeElement;
+    if (ae && ae.id && (
+      ae.id.startsWith('scheduleInput_') || ae.id.startsWith('laterInput_') ||
+      ae.id.startsWith('noteInput_') || ae.id.startsWith('completeNoteInput_')
+    )) {
+      preservedId = ae.id;
+      preservedValue = ae.value;
+    }
+
+    const doing = allTodos.filter(t => t.status === 'doing');
+    let others = allTodos.filter(t => t.status !== 'doing');
+
+    if (!showCompleted) {
+      others = others.filter(t => t.status !== 'completed');
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      others = others.filter(t => this._matchesSearch(t, q));
+    }
+
+    if (selectedTagFilters.size > 0) {
+      const groupMap = {};
+      for (const key of selectedTagFilters) {
+        const idx = key.indexOf('::');
+        if (idx < 0) continue;
+        const g = key.slice(0, idx);
+        const tag = key.slice(idx + 2);
+        if (!groupMap[g]) groupMap[g] = new Set();
+        groupMap[g].add(tag);
+      }
+      others = others.filter(t => this._matchesTagFilter(t, groupMap));
+    }
+
+    const doingContainer = document.getElementById('doingCards');
+    const doingEmpty = document.getElementById('doingEmpty');
+    if (doing.length === 0) {
+      doingContainer.innerHTML = '';
+      doingEmpty.style.display = 'block';
+    } else {
+      doingEmpty.style.display = 'none';
+      doingContainer.innerHTML = doing.map(t => this.renderCard(t, true, true)).join('');
+    }
+
+    const remains = allTodos.filter(t => t.status === 'open').length;
+    document.getElementById('remainsCount').textContent = '(remains: ' + remains + ')';
+    document.getElementById('visibleCount').textContent = 'Showing ' + others.length + ' item' + (others.length !== 1 ? 's' : '') + '.';
+
+    const todoCards = document.getElementById('todoCards');
+    const todoEmpty = document.getElementById('todoEmpty');
+    const todoFilterEmpty = document.getElementById('todoFilterEmpty');
+    const totalNonCompleted = allTodos.filter(t => t.status !== 'completed').length;
+    const hasActiveFilters = selectedTagFilters.size > 0 || !!search;
+
+    if (others.length === 0) {
+      todoCards.innerHTML = '';
+      if (totalNonCompleted === 0 && !hasActiveFilters) {
+        todoEmpty.style.display = 'block';
+        todoFilterEmpty.style.display = 'none';
+      } else {
+        todoEmpty.style.display = 'none';
+        todoFilterEmpty.style.display = 'block';
+      }
+    } else {
+      todoEmpty.style.display = 'none';
+      todoFilterEmpty.style.display = 'none';
+      todoCards.innerHTML = others.map(t => this.renderCard(t, false, showDetails)).join('');
+    }
+
+    this._renderTagFilterInfo(selectedTagFilters, tagGroupNames);
+
+    // Restore preserved input value
+    if (preservedId) {
+      const el = document.getElementById(preservedId);
+      if (el) {
+        el.value = preservedValue;
+        el.focus();
+      }
+    }
+  }
+
+  _matchesSearch(t, q) {
+    const fields = [String(t.id), t.status, t.content, t.thread_link || ''];
+    if (t.tags) {
+      t.tags.forEach(tg => { fields.push(tg.group_name, tg.tag); });
+    }
+    return fields.some(f => f.toLowerCase().indexOf(q) !== -1);
+  }
+
+  _matchesTagFilter(t, groupMap) {
+    const todoTags = (t.tags || []).map(tg => ({ group: tg.group_name, tag: tg.tag }));
+    return Object.entries(groupMap).every(([group, tags]) => {
+      return Array.from(tags).some(tag =>
+        todoTags.some(tt => tt.group === group && tt.tag === tag)
+      );
+    });
+  }
+
+  _renderTagFilterInfo(selectedTagFilters, tagGroupNames) {
+    const info = document.getElementById('tagFilterInfo');
+    if (selectedTagFilters.size === 0) {
+      info.innerHTML = 'Configured tags can narrow the list below.';
+      return;
+    }
+    const count = selectedTagFilters.size;
+    info.innerHTML = '<strong>' + count + ' tag filter' + (count !== 1 ? 's' : '') + ' active.</strong> ' +
+      'Same-group selections are OR. <a href="#" onclick="app.clearTagFilters(); return false">Clear filters</a>';
+  }
+
+  renderCard(todo, expanded, showDetails) {
+    const statusClass = todo.status;
+    const createdStr = new Date(todo.created_at * 1000).toLocaleString();
+    let metaHtml = '';
+
+    if (todo.scheduled_at && todo.scheduled_at > 0) {
+      metaHtml += '<span>Auto Start: ' + escapeHtml(new Date(todo.scheduled_at * 1000).toLocaleString()) + '</span>';
+    }
+    if (todo.completed_at && todo.completed_at > 0) {
+      metaHtml += '<span>Completed: ' + escapeHtml(new Date(todo.completed_at * 1000).toLocaleString()) + '</span>';
+    }
+
+    let tagRowHtml = '';
+    if (todo.tags && todo.tags.length > 0) {
+      tagRowHtml = '<div class="tag-row">' +
+        todo.tags.map(tg =>
+          '<span class="tag-chip" title="Click to remove" onclick="app.removeTag(' + todo.id + ',' + tg.id + ')">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
+        ).join('') + '</div>';
+    }
+
+    const threadVal = todo.thread_link || '';
+    const threadHtml = threadVal
+      ? '<a href="' + escapeHtml(threadVal) + '" class="thread-link" target="_blank" rel="noopener">' + escapeHtml(threadVal) + '</a>'
+      : '<span class="thread-empty">No thread link</span>';
+
+    const showDetailPanel = expanded || showDetails || this.app._detailStates[todo.id];
+    const actionsHtml = this._renderActions(todo);
+
+    return '<div class="card ' + statusClass + '" data-id="' + todo.id + '">' +
+      '<div class="summary">' +
+        '<div class="id-status">#' + todo.id + ' <span class="status-badge ' + statusClass + '">' + todo.status + '</span></div>' +
+        '<div class="time">' + createdStr + '</div>' +
+        '<div class="quick-actions">' + actionsHtml + '</div>' +
+        (metaHtml ? '<div class="meta-line">' + metaHtml + '</div>' : '') +
+        '<div class="content">' + escapeHtml(todo.content) + '</div>' +
+        tagRowHtml +
+        '<div class="thread-row">' +
+          '<span>Thread:</span> ' + threadHtml +
+          ' <button class="btn-small" onclick="app.editThread(' + todo.id + ', \'' + escapeHtml(threadVal.replace(/'/g, "\\'")) + '\')">Edit</button>' +
+        '</div>' +
+      '</div>' +
+      (showDetailPanel ? '<div class="details">' + this._renderDetails(todo) + '</div>' : '') +
+    '</div>';
+  }
+
+  _renderActions(todo) {
+    const btns = [];
+    if (todo.status === 'open') {
+      btns.push('<button onclick="app.start(' + todo.id + ')" class="btn-primary btn-small">Start</button>');
+      btns.push('<button onclick="app.complete(' + todo.id + ')" class="btn-small">Complete</button>');
+      btns.push('<button onclick="app.toggleDetails(' + todo.id + ')" class="btn-small">Details</button>');
+      btns.push('<button onclick="app.delete(' + todo.id + ')" class="btn-danger btn-small">Delete</button>');
+    } else if (todo.status === 'doing') {
+      btns.push('<button onclick="app.pause(' + todo.id + ')" class="btn-small">Pause</button>');
+      btns.push('<button onclick="app.complete(' + todo.id + ')" class="btn-small">Complete</button>');
+      btns.push('<button onclick="app.delete(' + todo.id + ')" class="btn-danger btn-small">Delete</button>');
+    } else if (todo.status === 'completed') {
+      btns.push('<button onclick="app.reopen(' + todo.id + ')" class="btn-small">Reopen</button>');
+      btns.push('<button onclick="app.toggleDetails(' + todo.id + ')" class="btn-small">Details</button>');
+      btns.push('<button onclick="app.delete(' + todo.id + ')" class="btn-danger btn-small">Delete</button>');
+    }
+    return btns.join(' ');
+  }
+
+  _renderDetails(todo) {
+    const parts = [];
+
+    // Tags section: existing tags on one row, edit buttons each group one row
+    parts.push('<div class="details-section">');
+    parts.push('<h4>Tags</h4>');
+    if (todo.tags && todo.tags.length > 0) {
+      parts.push('<div class="tag-row">' + todo.tags.map(tg =>
+        '<span class="tag-chip" onclick="app.removeTag(' + todo.id + ',' + tg.id + ')">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
+      ).join('') + '</div>');
+    } else {
+      parts.push('<div class="note-none">No tags.</div>');
+    }
+    if (window._tagGroupNames && window._tagGroupNames.length > 0) {
+      const todoTagKeys = new Set((todo.tags || []).map(tg => tg.group_name + '::' + tg.tag));
+      window._tagGroupNames.forEach(function(g) {
+        parts.push('<div class="tag-edit-group">');
+        parts.push('<span class="tag-group-name">' + escapeHtml(g.name) + ':</span>');
+        g.tags.forEach(function(tag) {
+          const key = g.name + '::' + tag;
+          const selected = todoTagKeys.has(key);
+          parts.push('<button class="tag-btn' + (selected ? ' selected' : '') + '" ' +
+            (selected ? 'disabled' : 'onclick="app.addTag(' + todo.id + ', \'' + escapeHtml(g.name.replace(/'/g, "\\'")) + '\', \'' + escapeHtml(tag.replace(/'/g, "\\'")) + '\')"') +
+            '>' + escapeHtml(tag) + '</button>');
+        });
+        parts.push('</div>');
+      });
+    }
+    parts.push('</div>');
+
+    // Notes section - chronological order (oldest first)
+    const notes = (todo.logs || []).filter(l => l.action === 'note' && l.note);
+    parts.push('<div class="details-section">');
+    parts.push('<h4>Notes</h4>');
+    if (notes.length === 0) {
+      parts.push('<div class="note-none">None</div>');
+    } else {
+      notes.slice().reverse().forEach(function(l) {
+        const ts = new Date(l.created_at * 1000).toLocaleString();
+        parts.push('<div class="note-item">');
+        parts.push('<div class="note-meta">' + escapeHtml(ts) + ' &middot; ' + escapeHtml(l.action) + '</div>');
+        parts.push('<div class="note-body">' + escapeHtml(l.note) + '</div>');
+        if (l.action === 'note') {
+          parts.push('<button class="btn-small" onclick="app.deleteNote(' + todo.id + ',' + l.id + ')" style="margin-top:0.2rem">Delete</button>');
+        }
+        parts.push('</div>');
+      });
+    }
+    parts.push('</div>');
+
+    // Completion Notes section - chronological order
+    const completionNotes = (todo.logs || []).filter(l => l.action === 'complete' && l.note);
+    if (completionNotes.length > 0) {
+      parts.push('<div class="details-section">');
+      parts.push('<h4>Completion Notes</h4>');
+      completionNotes.slice().reverse().forEach(function(l) {
+        const ts = new Date(l.created_at * 1000).toLocaleString();
+        parts.push('<div class="note-item">');
+        parts.push('<div class="note-meta">' + escapeHtml(ts) + ' &middot; ' + escapeHtml(l.action) + '</div>');
+        parts.push('<div class="note-body">' + escapeHtml(l.note) + '</div>');
+        parts.push('</div>');
+      });
+      parts.push('</div>');
+    }
+
+    // Add Note form
+    parts.push('<div class="details-section">');
+    parts.push('<h4>Add Note</h4>');
+    parts.push('<div class="detail-form">');
+    parts.push('<textarea id="noteInput_' + todo.id + '" placeholder="Write a note..." rows="2"></textarea>');
+    parts.push('<button onclick="app.addNote(' + todo.id + ')" class="btn-small btn-primary">Save Note</button>');
+    parts.push('</div></div>');
+
+    // Completion Note form (non-completed only)
+    if (todo.status !== 'completed') {
+      parts.push('<div class="details-section">');
+      parts.push('<h4>Complete</h4>');
+      parts.push('<div class="detail-form">');
+      parts.push('<textarea id="completeNoteInput_' + todo.id + '" placeholder="Completion note (optional)..." rows="2"></textarea>');
+      parts.push('<button onclick="app.completeWithNote(' + todo.id + ')" class="btn-small btn-primary">Complete Todo</button>');
+      parts.push('</div></div>');
+    }
+
+    // Schedule form (open only)
+    if (todo.status === 'open') {
+      const hasSchedule = todo.scheduled_at && todo.scheduled_at > 0;
+      const schedVal = hasSchedule ? toLocalISO(new Date(todo.scheduled_at * 1000)) : '';
+      parts.push('<div class="details-section">');
+      parts.push('<h4>Auto Start At</h4>');
+      parts.push('<div class="detail-form">');
+      parts.push('<input type="datetime-local" id="scheduleInput_' + todo.id + '" value="' + schedVal + '">');
+      parts.push('<button onclick="app.setSchedule(' + todo.id + ')" class="btn-small">' + (hasSchedule ? 'Update' : 'Save') + '</button>');
+      parts.push('<div class="form-hint">Leave empty to clear the schedule.</div>');
+      parts.push('<div class="quick-offsets">');
+      parts.push('<small>Quick: <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+10m\');return false">+10m</a> <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+30m\');return false">+30m</a> <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+1h\');return false">+1h</a> <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+1d\');return false">+1d</a></small>');
+      parts.push('</div></div></div>');
+    }
+
+    // Later form (doing only)
+    if (todo.status === 'doing') {
+      parts.push('<div class="details-section">');
+      parts.push('<h4>Later Until</h4>');
+      parts.push('<div class="detail-form">');
+      parts.push('<input type="datetime-local" id="laterInput_' + todo.id + '">');
+      parts.push('<button onclick="app.setLater(' + todo.id + ')" class="btn-small">Later</button>');
+      parts.push('<div class="form-hint">Later moves the todo back to open and auto-starts it at the selected time.</div>');
+      parts.push('<div class="quick-offsets">');
+      parts.push('<small>Quick: <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+10m\');return false">+10m</a> <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+30m\');return false">+30m</a> <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+1h\');return false">+1h</a> <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+1d\');return false">+1d</a></small>');
+      parts.push('</div></div></div>');
+    }
+
+    return parts.join('');
+  }
+}
+{{end}}

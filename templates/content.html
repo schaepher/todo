@@ -1,0 +1,115 @@
+{{define "content"}}
+<div class="container">
+  <h1>Todo</h1>
+
+  <!-- Add Todo Section -->
+  <div class="add-form">
+    <h2>Add Todo</h2>
+    <div class="form-row">
+      <input type="text" id="addThread" placeholder="Thread link" class="input-full">
+    </div>
+    <div class="form-row">
+      <textarea id="addContent" placeholder="What needs to be done?" rows="3" class="input-full"></textarea>
+    </div>
+    <div class="form-row form-inline">
+      <input type="datetime-local" id="addSchedule">
+      <button onclick="app.addTodo()" class="btn-primary">Add Todo</button>
+    </div>
+    <div class="quick-offsets">
+      <small>Quick: <a href="#" onclick="app.quickSchedule('+10m')">+10m</a> <a href="#" onclick="app.quickSchedule('+30m')">+30m</a> <a href="#" onclick="app.quickSchedule('+1h')">+1h</a> <a href="#" onclick="app.quickSchedule('+1d')">+1d</a></small>
+    </div>
+    {{if .TagGroups}}
+    <div class="add-tags">
+      {{range $g := .TagGroups}}
+      <div class="tag-group">
+        <span class="tag-group-name">{{$g.Name}}:</span>
+        {{range $g.Tags}}
+        <label class="tag-cb-label">
+          <input type="checkbox" class="add-tag-cb" data-group="{{$g.Name}}" value="{{.}}"> {{.}}
+        </label>
+        {{end}}
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+
+  <!-- Doing List -->
+  <div class="doing-panel" id="doingList">
+    <h3>Doing List</h3>
+    <div id="doingCards"></div>
+    <div id="doingEmpty" class="empty-state" style="display:none">No items in progress.</div>
+  </div>
+
+  <!-- Todo List -->
+  <div class="todo-panel" id="todoList">
+    <div class="todo-header">
+      <h3>Todo List <span id="remainsCount"></span></h3>
+      <div class="todo-toggles">
+        <label class="toggle-label"><input type="checkbox" id="showCompleted" onchange="app.toggleShowCompleted()"> Show completed todos</label>
+        <label class="toggle-label"><input type="checkbox" id="showDetails" onchange="app.toggleShowDetails()"> Show details</label>
+      </div>
+    </div>
+    <div class="search-area">
+      <input type="text" id="searchBox" placeholder="Search..." oninput="app.renderList()" class="input-full">
+      <small class="search-hint">Searches ID, status, content, thread link, tags</small>
+    </div>
+    {{if .TagGroups}}
+    <div id="tagFilters" class="tag-filters">
+      {{range $g := .TagGroups}}
+      <div class="tag-group" data-group-name="{{$g.Name}}">
+        <span class="tag-group-name">{{$g.Name}}:</span>
+        {{range $g.Tags}}
+        <button class="tag-filter-btn" data-group="{{$g.Name}}" data-tag="{{.}}" onclick="app.toggleTagFilter('{{$g.Name}}', '{{.}}')">{{.}}</button>
+        {{end}}
+      </div>
+      {{end}}
+      <div id="tagFilterInfo" class="tag-filter-info"></div>
+    </div>
+    {{else}}
+    <div id="tagFilters" class="tag-filters" style="display:none">
+      <div id="tagFilterInfo" class="tag-filter-info"></div>
+    </div>
+    {{end}}
+    <div id="visibleCount" class="visible-count"></div>
+    <div id="todoCards"></div>
+    <div id="todoEmpty" class="empty-state" style="display:none">No todos yet.</div>
+    <div id="todoFilterEmpty" class="empty-state" style="display:none">No items match current filters.</div>
+  </div>
+
+  <!-- Todo Result -->
+  <div id="todoResult" class="todo-result">
+    <h3>Todo Result</h3>
+    <div id="resultContent" class="result-content"><em>No actions yet.</em></div>
+  </div>
+
+  <!-- Token Section -->
+  <div id="tokenSection" class="token-section">
+    <div id="tokenStatus"></div>
+    <p><input id="newToken" placeholder="Set bearer token"><button onclick="app.setToken()">Save</button> <button onclick="app.clearToken()">Clear</button></p>
+  </div>
+</div>
+
+<!-- Thread Link Modal -->
+<div id="threadModal" class="modal-overlay" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="modalTitle">Edit Thread Link</h3>
+      <button class="modal-close" onclick="app.modal.close()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="modalTodoId">
+      <label for="modalThreadLink">Thread Link</label>
+      <input type="text" id="modalThreadLink" placeholder="Thread link URL" class="input-full">
+      <small>Leave empty to clear the thread link.</small>
+    </div>
+    <div class="modal-footer">
+      <button onclick="app.modal.close()">Cancel</button>
+      <button onclick="app.modal.save()" class="btn-primary">Save Thread</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
+{{end}}

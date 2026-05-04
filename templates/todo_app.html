@@ -1,0 +1,222 @@
+{{define "todo-app"}}
+class TodoApp {
+  constructor() {
+    this.api = new TodoAPI();
+    this.toast = new TodoToast('toastContainer');
+    this.renderer = new TodoRenderer(this.api, this.toast, this);
+    this.modal = new TodoModal(this);
+    this.allTodos = [];
+    this.showCompleted = false;
+    this.showDetails = false;
+    this.selectedTagFilters = new Set();
+    this._detailStates = {};
+    this._init();
+  }
+
+  _init() {
+    this._updateTokenStatus();
+    this.fetchTodos();
+    setInterval(() => this.fetchTodos(), 10000);
+  }
+
+  _updateTokenStatus() {
+    const el = document.getElementById('tokenStatus');
+    if (!el) return;
+    el.textContent = this.api._token ? 'Token is configured.' : 'No token set.';
+  }
+
+  async fetchTodos() {
+    try {
+      const data = await this.api.fetchTodos(this.showCompleted);
+      const newItems = data.items || [];
+      if (JSON.stringify(newItems) !== JSON.stringify(this.allTodos)) {
+        this.allTodos = newItems;
+        this.renderList();
+      }
+    } catch (e) {
+      console.error('fetch failed', e);
+    }
+  }
+
+  async _mutate(url, method, body, successMsg) {
+    try {
+      const data = await this.api.mutation(url, method, body);
+      const resultEl = document.getElementById('resultContent');
+      if (resultEl) {
+        resultEl.innerHTML = '<span class="result-success">' + escapeHtml(successMsg || data.message || 'OK') + '</span>';
+      }
+      this.toast.success(successMsg || data.message || 'Success');
+      await this.fetchTodos();
+    } catch (e) {
+      this.toast.error(e.message || 'Error');
+      const resultEl = document.getElementById('resultContent');
+      if (resultEl) {
+        resultEl.innerHTML = '<span class="result-error">' + escapeHtml(e.message) + '</span>';
+      }
+    }
+  }
+
+  renderList() {
+    const search = document.getElementById('searchBox')?.value || '';
+    this.renderer.renderList(
+      this.allTodos, this.showCompleted, this.showDetails,
+      search, this.selectedTagFilters, window._tagGroupNames || []
+    );
+  }
+
+  toggleShowCompleted() {
+    this.showCompleted = document.getElementById('showCompleted').checked;
+    this.fetchTodos();
+  }
+
+  toggleShowDetails() {
+    this.showDetails = document.getElementById('showDetails').checked;
+    this.renderList();
+  }
+
+  toggleTagFilter(group, tag) {
+    const key = group + '::' + tag;
+    if (this.selectedTagFilters.has(key)) {
+      this.selectedTagFilters.delete(key);
+    } else {
+      this.selectedTagFilters.add(key);
+    }
+    document.querySelectorAll('.tag-filter-btn').forEach(btn => {
+      btn.classList.toggle('active', this.selectedTagFilters.has(btn.dataset.group + '::' + btn.dataset.tag));
+    });
+    this.renderList();
+  }
+
+  clearTagFilters() {
+    this.selectedTagFilters.clear();
+    document.querySelectorAll('.tag-filter-btn').forEach(btn => btn.classList.remove('active'));
+    this.renderList();
+  }
+
+  toggleDetails(id) {
+    this._detailStates[id] = !this._detailStates[id];
+    this.renderList();
+  }
+
+  addTodo() {
+    const content = document.getElementById('addContent').value.trim();
+    const thread = document.getElementById('addThread').value.trim();
+    const schedStr = document.getElementById('addSchedule').value;
+    let sched = 0;
+    if (schedStr) sched = Math.floor(new Date(schedStr).getTime() / 1000);
+    if (!content) { this.toast.error('Content required'); return; }
+
+    const tags = [];
+    document.querySelectorAll('.add-tag-cb:checked').forEach(cb => {
+      tags.push({ group_name: cb.dataset.group, tag: cb.value });
+    });
+
+    this._mutate('/admin/api/todos', 'POST', { content, thread_link: thread, schedule_at: sched, tags }, 'Todo created').then(() => {
+      document.getElementById('addContent').value = '';
+      document.getElementById('addThread').value = '';
+      document.getElementById('addSchedule').value = '';
+      document.querySelectorAll('.add-tag-cb:checked').forEach(cb => cb.checked = false);
+    });
+  }
+
+  quickSchedule(offset) {
+    const now = new Date();
+    const val = parseInt(offset);
+    switch (offset.slice(-1)) {
+      case 'm': now.setMinutes(now.getMinutes() + val); break;
+      case 'h': now.setHours(now.getHours() + val); break;
+      case 'd': now.setDate(now.getDate() + val); break;
+    }
+    document.getElementById('addSchedule').value = toLocalISO(now);
+  }
+
+  quickScheduleDetail(id, offset) {
+    const now = new Date();
+    const val = parseInt(offset);
+    switch (offset.slice(-1)) {
+      case 'm': now.setMinutes(now.getMinutes() + val); break;
+      case 'h': now.setHours(now.getHours() + val); break;
+      case 'd': now.setDate(now.getDate() + val); break;
+    }
+    const input = document.getElementById('scheduleInput_' + id);
+    if (input) input.value = toLocalISO(now);
+  }
+
+  quickLaterDetail(id, offset) {
+    const now = new Date();
+    const val = parseInt(offset);
+    switch (offset.slice(-1)) {
+      case 'm': now.setMinutes(now.getMinutes() + val); break;
+      case 'h': now.setHours(now.getHours() + val); break;
+      case 'd': now.setDate(now.getDate() + val); break;
+    }
+    const input = document.getElementById('laterInput_' + id);
+    if (input) input.value = toLocalISO(now);
+  }
+
+  start(id) { this._mutate('/admin/api/todos/' + id + '/start', 'POST', {}, 'Started'); }
+  pause(id) { this._mutate('/admin/api/todos/' + id + '/pause', 'POST', {}, 'Paused'); }
+  complete(id) { this._mutate('/admin/api/todos/' + id + '/complete', 'POST', { note: '' }, 'Completed'); }
+  reopen(id) { this._mutate('/admin/api/todos/' + id + '/reopen', 'POST', {}, 'Reopened'); }
+  delete(id) { if (confirm('Delete todo #' + id + '?')) this._mutate('/admin/api/todos/' + id, 'DELETE', undefined, 'Deleted'); }
+
+  completeWithNote(id) {
+    const note = document.getElementById('completeNoteInput_' + id)?.value || '';
+    this._mutate('/admin/api/todos/' + id + '/complete', 'POST', { note }, 'Completed');
+  }
+
+  addNote(id) {
+    const note = document.getElementById('noteInput_' + id)?.value.trim();
+    if (!note) { this.toast.error('Note cannot be empty'); return; }
+    this._mutate('/admin/api/todos/' + id + '/note', 'POST', { note }, 'Note added');
+  }
+
+  deleteNote(todoId, logId) {
+    this._mutate('/admin/api/todos/' + todoId + '/notes/' + logId, 'DELETE', undefined, 'Note deleted');
+  }
+
+  setSchedule(id) {
+    const input = document.getElementById('scheduleInput_' + id);
+    const val = input ? input.value : '';
+    let sched = 0;
+    if (val) sched = Math.floor(new Date(val).getTime() / 1000);
+    this._mutate('/admin/api/todos/' + id + '/schedule', 'POST', { schedule_at: sched }, 'Schedule updated');
+  }
+
+  setLater(id) {
+    const input = document.getElementById('laterInput_' + id);
+    const val = input ? input.value : '';
+    if (!val) { this.toast.error('Later requires a target time'); return; }
+    this._mutate('/admin/api/todos/' + id + '/later', 'POST', { schedule_at: Math.floor(new Date(val).getTime() / 1000) }, 'Postponed');
+  }
+
+  addTag(id, group, tag) {
+    this._mutate('/admin/api/todos/' + id + '/tags', 'POST', { group_name: group, tag: tag }, 'Tag added');
+  }
+
+  removeTag(todoId, tagId) {
+    this._mutate('/admin/api/todos/' + todoId + '/tags/' + tagId, 'DELETE', undefined, 'Tag removed');
+  }
+
+  editThread(todoId, currentLink) {
+    this.modal.open(todoId, currentLink);
+  }
+
+  setToken() {
+    const token = document.getElementById('newToken').value.trim();
+    if (!token) return this.toast.error('Token cannot be empty');
+    localStorage.setItem('todo_token', token);
+    this.api._token = token;
+    this._updateTokenStatus();
+    document.getElementById('newToken').value = '';
+    this.toast.success('Token saved');
+  }
+
+  clearToken() {
+    localStorage.removeItem('todo_token');
+    this.api._token = null;
+    this._updateTokenStatus();
+    this.toast.success('Token cleared');
+  }
+}
+{{end}}

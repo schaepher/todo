@@ -1,0 +1,31 @@
+{{define "todo-api"}}
+class TodoAPI {
+  constructor() {
+    this._token = localStorage.getItem('todo_token');
+  }
+
+  _headers() {
+    const h = { 'Content-Type': 'application/json' };
+    if (this._token) h['Authorization'] = 'Bearer ' + this._token;
+    return h;
+  }
+
+  async fetchTodos(includeCompleted) {
+    const qs = includeCompleted ? '?include_completed=true' : '?include_completed=false';
+    const res = await fetch('/admin/api/todos' + qs, { headers: this._headers() });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  async mutation(url, method, body) {
+    const res = await fetch(url, {
+      method,
+      headers: this._headers(),
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) throw new Error(data.message || 'Request failed');
+    return data;
+  }
+}
+{{end}}

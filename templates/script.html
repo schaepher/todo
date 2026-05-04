@@ -1,0 +1,27 @@
+{{define "script"}}
+<script>
+// ====== Utility ======
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+function toLocalISO(date) {
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 16);
+}
+
+{{template "todo-toast"}}
+{{template "todo-modal"}}
+{{template "todo-api"}}
+{{template "todo-renderer"}}
+{{template "todo-app"}}
+
+// ====== Bootstrap ======
+(function() {
+  window._tagGroupNames = {{.TagGroupsJSON}};
+  window.app = new TodoApp();
+})();
+</script>
+{{end}}

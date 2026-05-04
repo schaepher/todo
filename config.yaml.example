@@ -1,0 +1,8 @@
+port: 8080
+token: "0d288ca3-4e1d-498a-84d4-d9144bc340ba"
+tag_groups:
+  - name: "Env"
+    tags: ["live","staging","uat","test"]
+  - name: "Region"
+    tags: ["beijing","shanghai","guangdong","fujian"]
+worker_interval: 30

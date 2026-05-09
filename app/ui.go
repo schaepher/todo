@@ -1,23 +1,19 @@
 package app
 
 import (
+	"embed"
 	"encoding/json"
 	"html/template"
 	"net/http"
-	"path/filepath"
-	"runtime"
 	"todo/config"
 	pkglog "todo/pkg/log"
 	"go.uber.org/zap"
 )
 
-var tmpl *template.Template
+//go:embed templates/*.html
+var templateFS embed.FS
 
-func init() {
-	_, filename, _, _ := runtime.Caller(0)
-	dir := filepath.Dir(filename)
-	tmpl = template.Must(template.ParseGlob(filepath.Join(dir, "..", "templates", "*.html")))
-}
+var tmpl = template.Must(template.ParseFS(templateFS, "templates/*.html"))
 
 func SetupUIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/admin", handleAdminPage)

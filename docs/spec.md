@@ -163,6 +163,7 @@ State rules:
   - `Last Result` — collapsible, hidden by default
 - `Doing List` must appear above `Todo List`.
 - `Last Result` is a collapsible section that shows the latest todo-action response on demand.
+- English characters must be rendered in a monospace font.
 
 ### 11.2 New Todo Modal
 

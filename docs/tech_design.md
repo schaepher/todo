@@ -376,7 +376,7 @@ The Todo page contains the following major sections in order:
 3. Todo List section
 4. Last Result section — collapsible, hidden by default, shows the latest todo-action response
 
-Doing List must appear above Todo List. Creating a todo is done via a New Todo modal triggered by a button in the Todo List header.
+Doing List must appear above Todo List. Creating a todo is done via a New Todo modal triggered by a button in the Todo List header. English characters are rendered in a monospace font (`'Courier New', Consolas, 'Liberation Mono', monospace`).
 
 ### 12.2 Add Todo Section
 

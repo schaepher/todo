@@ -12,7 +12,7 @@ class TodoRenderer {
     const ae = document.activeElement;
     if (ae && ae.id && (
       ae.id.startsWith('scheduleInput_') || ae.id.startsWith('laterInput_') ||
-      ae.id.startsWith('noteInput_') || ae.id.startsWith('completeNoteInput_')
+      ae.id.startsWith('noteInput_')
     )) {
       preservedId = ae.id;
       preservedValue = ae.value;
@@ -55,7 +55,9 @@ class TodoRenderer {
 
     const remains = allTodos.filter(t => t.status === 'open').length;
     document.getElementById('remainsCount').textContent = '(remains: ' + remains + ')';
-    document.getElementById('visibleCount').textContent = 'Showing ' + others.length + ' item' + (others.length !== 1 ? 's' : '') + '.';
+    document.getElementById('countNum').textContent = others.length;
+    const countLabel = document.getElementById('countLabel');
+    if (countLabel) countLabel.textContent = others.length === 1 ? 'item' : 'items';
 
     const todoCards = document.getElementById('todoCards');
     const todoEmpty = document.getElementById('todoEmpty');
@@ -134,14 +136,14 @@ class TodoRenderer {
     if (todo.tags && todo.tags.length > 0) {
       tagRowHtml = '<div class="tag-row">' +
         todo.tags.map(tg =>
-          '<span class="tag-chip" title="Click to remove" onclick="app.removeTag(' + todo.id + ',' + tg.id + ')">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
+          '<span class="tag-chip" title="' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + '">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
         ).join('') + '</div>';
     }
 
     const threadVal = todo.thread_link || '';
     const threadHtml = threadVal
       ? '<a href="' + escapeHtml(threadVal) + '" class="thread-link" target="_blank" rel="noopener">' + escapeHtml(threadVal) + '</a>'
-      : '<span class="thread-empty">No thread link</span>';
+      : '<span class="thread-empty">No main link</span>';
 
     const showDetailPanel = expanded || showDetails || this.app._detailStates[todo.id];
     const actionsHtml = this._renderActions(todo);
@@ -155,8 +157,8 @@ class TodoRenderer {
         '<div class="content">' + escapeHtml(todo.content) + '</div>' +
         tagRowHtml +
         '<div class="thread-row">' +
-          '<span>Thread:</span> ' + threadHtml +
-          ' <button class="btn-small" onclick="app.editThread(' + todo.id + ', \'' + escapeHtml(threadVal.replace(/'/g, "\\'")) + '\')">Edit</button>' +
+          '<span>Main Link:</span> ' + threadHtml +
+          ' <button class="btn-small" onclick="app.editMainLink(' + todo.id + ', \'' + escapeHtml(threadVal.replace(/'/g, "\\'")) + '\')">Edit</button>' +
         '</div>' +
       '</div>' +
       (showDetailPanel ? '<div class="details">' + this._renderDetails(todo) + '</div>' : '') +
@@ -172,7 +174,6 @@ class TodoRenderer {
       btns.push('<button onclick="app.delete(' + todo.id + ')" class="btn-danger btn-small">Delete</button>');
     } else if (todo.status === 'doing') {
       btns.push('<button onclick="app.pause(' + todo.id + ')" class="btn-small">Pause</button>');
-      btns.push('<button onclick="app.complete(' + todo.id + ')" class="btn-small">Complete</button>');
       btns.push('<button onclick="app.delete(' + todo.id + ')" class="btn-danger btn-small">Delete</button>');
     } else if (todo.status === 'completed') {
       btns.push('<button onclick="app.reopen(' + todo.id + ')" class="btn-small">Reopen</button>');
@@ -185,30 +186,18 @@ class TodoRenderer {
   _renderDetails(todo) {
     const parts = [];
 
-    // Tags section: existing tags on one row, edit buttons each group one row
+    // Tags section: selected tags + edit button
     parts.push('<div class="details-section">');
     parts.push('<h4>Tags</h4>');
     if (todo.tags && todo.tags.length > 0) {
       parts.push('<div class="tag-row">' + todo.tags.map(tg =>
-        '<span class="tag-chip" onclick="app.removeTag(' + todo.id + ',' + tg.id + ')">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
+        '<span class="tag-chip">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
       ).join('') + '</div>');
     } else {
       parts.push('<div class="note-none">No tags.</div>');
     }
     if (window._tagGroupNames && window._tagGroupNames.length > 0) {
-      const todoTagKeys = new Set((todo.tags || []).map(tg => tg.group_name + '::' + tg.tag));
-      window._tagGroupNames.forEach(function(g) {
-        parts.push('<div class="tag-edit-group">');
-        parts.push('<span class="tag-group-name">' + escapeHtml(g.name) + ':</span>');
-        g.tags.forEach(function(tag) {
-          const key = g.name + '::' + tag;
-          const selected = todoTagKeys.has(key);
-          parts.push('<button class="tag-btn' + (selected ? ' selected' : '') + '" ' +
-            (selected ? 'disabled' : 'onclick="app.addTag(' + todo.id + ', \'' + escapeHtml(g.name.replace(/'/g, "\\'")) + '\', \'' + escapeHtml(tag.replace(/'/g, "\\'")) + '\')"') +
-            '>' + escapeHtml(tag) + '</button>');
-        });
-        parts.push('</div>');
-      });
+      parts.push('<button onclick="app.openEditTagsModal(' + todo.id + ')" class="btn-small">Edit Tags</button>');
     }
     parts.push('</div>');
 
@@ -247,21 +236,14 @@ class TodoRenderer {
       parts.push('</div>');
     }
 
-    // Add Note form
-    parts.push('<div class="details-section">');
-    parts.push('<h4>Add Note</h4>');
-    parts.push('<div class="detail-form">');
-    parts.push('<textarea id="noteInput_' + todo.id + '" placeholder="Write a note..." rows="2"></textarea>');
-    parts.push('<button onclick="app.addNote(' + todo.id + ')" class="btn-small btn-primary">Save Note</button>');
-    parts.push('</div></div>');
-
-    // Completion Note form (non-completed only)
+    // Add Note + Complete (non-completed only) - shared textarea
     if (todo.status !== 'completed') {
       parts.push('<div class="details-section">');
-      parts.push('<h4>Complete</h4>');
+      parts.push('<h4>Add Note</h4>');
       parts.push('<div class="detail-form">');
-      parts.push('<textarea id="completeNoteInput_' + todo.id + '" placeholder="Completion note (optional)..." rows="2"></textarea>');
-      parts.push('<button onclick="app.completeWithNote(' + todo.id + ')" class="btn-small btn-primary">Complete Todo</button>');
+      parts.push('<textarea id="noteInput_' + todo.id + '" placeholder="Write a note..." rows="2"></textarea>');
+      parts.push('<button onclick="app.addNote(' + todo.id + ')" class="btn-small btn-primary">Save Note</button>');
+      parts.push('<button onclick="app.completeWithNote(' + todo.id + ')" class="btn-small">Complete Todo</button>');
       parts.push('</div></div>');
     }
 
@@ -271,26 +253,34 @@ class TodoRenderer {
       const schedVal = hasSchedule ? toLocalISO(new Date(todo.scheduled_at * 1000)) : '';
       parts.push('<div class="details-section">');
       parts.push('<h4>Auto Start At</h4>');
-      parts.push('<div class="detail-form">');
-      parts.push('<input type="datetime-local" id="scheduleInput_' + todo.id + '" value="' + schedVal + '">');
+      parts.push('<div class="detail-form schedule-form">');
+      parts.push('<input type="datetime-local" id="scheduleInput_' + todo.id + '" value="' + schedVal + '" class="narrow-datetime">');
       parts.push('<button onclick="app.setSchedule(' + todo.id + ')" class="btn-small">' + (hasSchedule ? 'Update' : 'Save') + '</button>');
+      parts.push('<span class="quick-offsets-inline">');
+      parts.push('<a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+10m\');return false">+10m</a>');
+      parts.push('<a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+30m\');return false">+30m</a>');
+      parts.push('<a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+1h\');return false">+1h</a>');
+      parts.push('<a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+1d\');return false">+1d</a>');
+      parts.push('</span>');
       parts.push('<div class="form-hint">Leave empty to clear the schedule.</div>');
-      parts.push('<div class="quick-offsets">');
-      parts.push('<small>Quick: <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+10m\');return false">+10m</a> <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+30m\');return false">+30m</a> <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+1h\');return false">+1h</a> <a href="#" onclick="app.quickScheduleDetail(' + todo.id + ', \'+1d\');return false">+1d</a></small>');
-      parts.push('</div></div></div>');
+      parts.push('</div></div>');
     }
 
     // Later form (doing only)
     if (todo.status === 'doing') {
       parts.push('<div class="details-section">');
       parts.push('<h4>Later Until</h4>');
-      parts.push('<div class="detail-form">');
-      parts.push('<input type="datetime-local" id="laterInput_' + todo.id + '">');
+      parts.push('<div class="detail-form schedule-form">');
+      parts.push('<input type="datetime-local" id="laterInput_' + todo.id + '" class="narrow-datetime">');
       parts.push('<button onclick="app.setLater(' + todo.id + ')" class="btn-small">Later</button>');
+      parts.push('<span class="quick-offsets-inline">');
+      parts.push('<a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+10m\');return false">+10m</a>');
+      parts.push('<a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+30m\');return false">+30m</a>');
+      parts.push('<a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+1h\');return false">+1h</a>');
+      parts.push('<a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+1d\');return false">+1d</a>');
+      parts.push('</span>');
       parts.push('<div class="form-hint">Later moves the todo back to open and auto-starts it at the selected time.</div>');
-      parts.push('<div class="quick-offsets">');
-      parts.push('<small>Quick: <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+10m\');return false">+10m</a> <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+30m\');return false">+30m</a> <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+1h\');return false">+1h</a> <a href="#" onclick="app.quickLaterDetail(' + todo.id + ', \'+1d\');return false">+1d</a></small>');
-      parts.push('</div></div></div>');
+      parts.push('</div></div>');
     }
 
     return parts.join('');

@@ -4,12 +4,14 @@ class TodoApp {
     this.api = new TodoAPI();
     this.toast = new TodoToast('toastContainer');
     this.renderer = new TodoRenderer(this.api, this.toast, this);
-    this.modal = new TodoModal(this);
+    this.mainLinkModal = new MainLinkModal(this);
     this.allTodos = [];
     this.showCompleted = false;
     this.showDetails = false;
     this.selectedTagFilters = new Set();
     this._detailStates = {};
+    this._tagFilterPanelOpen = false;
+    this._resultPanelOpen = false;
     this._init();
   }
 
@@ -74,6 +76,30 @@ class TodoApp {
     this.renderList();
   }
 
+  toggleTagFilterPanel() {
+    this._tagFilterPanelOpen = !this._tagFilterPanelOpen;
+    const panel = document.getElementById('tagFilters');
+    const arrow = document.getElementById('filterToggleArrow');
+    if (panel) {
+      panel.style.display = this._tagFilterPanelOpen ? 'block' : 'none';
+    }
+    if (arrow) {
+      arrow.textContent = this._tagFilterPanelOpen ? '▼' : '▶';
+    }
+  }
+
+  toggleResult() {
+    this._resultPanelOpen = !this._resultPanelOpen;
+    const content = document.getElementById('resultContent');
+    const arrow = document.getElementById('resultToggleArrow');
+    if (content) {
+      content.style.display = this._resultPanelOpen ? 'block' : 'none';
+    }
+    if (arrow) {
+      arrow.textContent = this._resultPanelOpen ? '▼' : '▶';
+    }
+  }
+
   toggleTagFilter(group, tag) {
     const key = group + '::' + tag;
     if (this.selectedTagFilters.has(key)) {
@@ -98,62 +124,116 @@ class TodoApp {
     this.renderList();
   }
 
-  addTodo() {
-    const content = document.getElementById('addContent').value.trim();
-    const thread = document.getElementById('addThread').value.trim();
-    const schedStr = document.getElementById('addSchedule').value;
+  // ---- New Todo Modal ----
+  openNewTodoModal() {
+    document.getElementById('newTodoModal').style.display = 'flex';
+    document.getElementById('newTodoContent').focus();
+  }
+
+  closeNewTodoModal() {
+    document.getElementById('newTodoModal').style.display = 'none';
+    document.getElementById('newTodoContent').value = '';
+    document.getElementById('newTodoLink').value = '';
+    document.getElementById('newTodoSchedule').value = '';
+    document.querySelectorAll('#newTodoModal .add-tag-cb:checked').forEach(cb => cb.checked = false);
+  }
+
+  quickNewTodoSchedule(offset) {
+    const now = new Date();
+    const val = parseInt(offset);
+    switch (offset.slice(-1)) {
+      case 'm': now.setMinutes(now.getMinutes() + val); break;
+      case 'h': now.setHours(now.getHours() + val); break;
+      case 'd': now.setDate(now.getDate() + val); break;
+    }
+    document.getElementById('newTodoSchedule').value = toLocalISO(now);
+  }
+
+  createTodo() {
+    const content = document.getElementById('newTodoContent').value.trim();
+    const thread = document.getElementById('newTodoLink').value.trim();
+    const schedStr = document.getElementById('newTodoSchedule').value;
     let sched = 0;
     if (schedStr) sched = Math.floor(new Date(schedStr).getTime() / 1000);
     if (!content) { this.toast.error('Content required'); return; }
 
     const tags = [];
-    document.querySelectorAll('.add-tag-cb:checked').forEach(cb => {
+    document.querySelectorAll('#newTodoModal .add-tag-cb:checked').forEach(cb => {
       tags.push({ group_name: cb.dataset.group, tag: cb.value });
     });
 
     this._mutate('/admin/api/todos', 'POST', { content, thread_link: thread, schedule_at: sched, tags }, 'Todo created').then(() => {
-      document.getElementById('addContent').value = '';
-      document.getElementById('addThread').value = '';
-      document.getElementById('addSchedule').value = '';
-      document.querySelectorAll('.add-tag-cb:checked').forEach(cb => cb.checked = false);
+      this.closeNewTodoModal();
     });
   }
 
-  quickSchedule(offset) {
-    const now = new Date();
-    const val = parseInt(offset);
-    switch (offset.slice(-1)) {
-      case 'm': now.setMinutes(now.getMinutes() + val); break;
-      case 'h': now.setHours(now.getHours() + val); break;
-      case 'd': now.setDate(now.getDate() + val); break;
-    }
-    document.getElementById('addSchedule').value = toLocalISO(now);
+  // ---- Edit Tags Modal ----
+  openEditTagsModal(id) {
+    this._editTagsTodoId = id;
+    document.getElementById('editTagsTodoId').textContent = id;
+    this._renderEditTagsModal(id);
+    document.getElementById('editTagsModal').style.display = 'flex';
   }
 
-  quickScheduleDetail(id, offset) {
-    const now = new Date();
-    const val = parseInt(offset);
-    switch (offset.slice(-1)) {
-      case 'm': now.setMinutes(now.getMinutes() + val); break;
-      case 'h': now.setHours(now.getHours() + val); break;
-      case 'd': now.setDate(now.getDate() + val); break;
-    }
-    const input = document.getElementById('scheduleInput_' + id);
-    if (input) input.value = toLocalISO(now);
+  closeEditTagsModal() {
+    document.getElementById('editTagsModal').style.display = 'none';
+    this._editTagsTodoId = null;
   }
 
-  quickLaterDetail(id, offset) {
-    const now = new Date();
-    const val = parseInt(offset);
-    switch (offset.slice(-1)) {
-      case 'm': now.setMinutes(now.getMinutes() + val); break;
-      case 'h': now.setHours(now.getHours() + val); break;
-      case 'd': now.setDate(now.getDate() + val); break;
+  _renderEditTagsModal(id) {
+    const todo = this.allTodos.find(t => t.id === id);
+    if (!todo) return;
+
+    // Selected tags
+    const selectedContainer = document.getElementById('editTagsSelected');
+    if (todo.tags && todo.tags.length > 0) {
+      selectedContainer.innerHTML = todo.tags.map(tg =>
+        '<span class="tag-chip">[' + escapeHtml(tg.group_name) + ': ' + escapeHtml(tg.tag) + ']</span>'
+      ).join('');
+    } else {
+      selectedContainer.innerHTML = '<span class="note-none">No tags selected.</span>';
     }
-    const input = document.getElementById('laterInput_' + id);
-    if (input) input.value = toLocalISO(now);
+
+    // Available tags
+    const availableContainer = document.getElementById('editTagsAvailable');
+    const todoTagKeys = new Set((todo.tags || []).map(tg => tg.group_name + '::' + tg.tag));
+
+    const parts = [];
+    window._tagGroupNames.forEach(function(g) {
+      parts.push('<div class="tag-edit-group">');
+      parts.push('<span class="tag-group-name">' + escapeHtml(g.name) + ':</span>');
+      g.tags.forEach(function(tag) {
+        const key = g.name + '::' + tag;
+        const selected = todoTagKeys.has(key);
+        parts.push('<button class="tag-btn' + (selected ? ' selected' : '') + '" ' +
+          'onclick="app.toggleTagInModal(' + id + ', \'' + escapeHtml(g.name.replace(/'/g, "\\'")) + '\', \'' + escapeHtml(tag.replace(/'/g, "\\'")) + '\')">' +
+          escapeHtml(tag) + '</button>');
+      });
+      parts.push('</div>');
+    });
+    availableContainer.innerHTML = parts.join('');
   }
 
+  async toggleTagInModal(id, group, tag) {
+    const todo = this.allTodos.find(t => t.id === id);
+    if (!todo) return;
+
+    const existing = (todo.tags || []).find(tg => tg.group_name === group && tg.tag === tag);
+    if (existing) {
+      await this._mutate('/admin/api/todos/' + id + '/tags/' + existing.id, 'DELETE', undefined, 'Tag removed');
+    } else {
+      await this._mutate('/admin/api/todos/' + id + '/tags', 'POST', { group_name: group, tag: tag }, 'Tag added');
+    }
+    // Re-render the modal with updated data
+    this._renderEditTagsModal(id);
+  }
+
+  // ---- Main Link Modal (delegated to MainLinkModal class) ----
+  editMainLink(todoId, currentLink) {
+    this.mainLinkModal.open(todoId, currentLink);
+  }
+
+  // ---- Todo Actions ----
   start(id) { this._mutate('/admin/api/todos/' + id + '/start', 'POST', {}, 'Started'); }
   pause(id) { this._mutate('/admin/api/todos/' + id + '/pause', 'POST', {}, 'Paused'); }
   complete(id) { this._mutate('/admin/api/todos/' + id + '/complete', 'POST', { note: '' }, 'Completed'); }
@@ -161,7 +241,7 @@ class TodoApp {
   delete(id) { if (confirm('Delete todo #' + id + '?')) this._mutate('/admin/api/todos/' + id, 'DELETE', undefined, 'Deleted'); }
 
   completeWithNote(id) {
-    const note = document.getElementById('completeNoteInput_' + id)?.value || '';
+    const note = document.getElementById('noteInput_' + id)?.value || '';
     this._mutate('/admin/api/todos/' + id + '/complete', 'POST', { note }, 'Completed');
   }
 
@@ -198,10 +278,31 @@ class TodoApp {
     this._mutate('/admin/api/todos/' + todoId + '/tags/' + tagId, 'DELETE', undefined, 'Tag removed');
   }
 
-  editThread(todoId, currentLink) {
-    this.modal.open(todoId, currentLink);
+  quickScheduleDetail(id, offset) {
+    const now = new Date();
+    const val = parseInt(offset);
+    switch (offset.slice(-1)) {
+      case 'm': now.setMinutes(now.getMinutes() + val); break;
+      case 'h': now.setHours(now.getHours() + val); break;
+      case 'd': now.setDate(now.getDate() + val); break;
+    }
+    const input = document.getElementById('scheduleInput_' + id);
+    if (input) input.value = toLocalISO(now);
   }
 
+  quickLaterDetail(id, offset) {
+    const now = new Date();
+    const val = parseInt(offset);
+    switch (offset.slice(-1)) {
+      case 'm': now.setMinutes(now.getMinutes() + val); break;
+      case 'h': now.setHours(now.getHours() + val); break;
+      case 'd': now.setDate(now.getDate() + val); break;
+    }
+    const input = document.getElementById('laterInput_' + id);
+    if (input) input.value = toLocalISO(now);
+  }
+
+  // ---- Token ----
   setToken() {
     const token = document.getElementById('newToken').value.trim();
     if (!token) return this.toast.error('Token cannot be empty');

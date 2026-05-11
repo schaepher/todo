@@ -2,38 +2,6 @@
 <div class="container">
   <h1>Todo</h1>
 
-  <!-- Add Todo Section -->
-  <div class="add-form">
-    <h2>Add Todo</h2>
-    <div class="form-row">
-      <input type="text" id="addThread" placeholder="Thread link" class="input-full">
-    </div>
-    <div class="form-row">
-      <textarea id="addContent" placeholder="What needs to be done?" rows="3" class="input-full"></textarea>
-    </div>
-    <div class="form-row form-inline">
-      <input type="datetime-local" id="addSchedule">
-      <button onclick="app.addTodo()" class="btn-primary">Add Todo</button>
-    </div>
-    <div class="quick-offsets">
-      <small>Quick: <a href="#" onclick="app.quickSchedule('+10m')">+10m</a> <a href="#" onclick="app.quickSchedule('+30m')">+30m</a> <a href="#" onclick="app.quickSchedule('+1h')">+1h</a> <a href="#" onclick="app.quickSchedule('+1d')">+1d</a></small>
-    </div>
-    {{if .TagGroups}}
-    <div class="add-tags">
-      {{range $g := .TagGroups}}
-      <div class="tag-group">
-        <span class="tag-group-name">{{$g.Name}}:</span>
-        {{range $g.Tags}}
-        <label class="tag-cb-label">
-          <input type="checkbox" class="add-tag-cb" data-group="{{$g.Name}}" value="{{.}}"> {{.}}
-        </label>
-        {{end}}
-      </div>
-      {{end}}
-    </div>
-    {{end}}
-  </div>
-
   <!-- Doing List -->
   <div class="doing-panel" id="doingList">
     <h3>Doing List</h3>
@@ -45,42 +13,49 @@
   <div class="todo-panel" id="todoList">
     <div class="todo-header">
       <h3>Todo List <span id="remainsCount"></span></h3>
-      <div class="todo-toggles">
-        <label class="toggle-label"><input type="checkbox" id="showCompleted" onchange="app.toggleShowCompleted()"> Show completed todos</label>
-        <label class="toggle-label"><input type="checkbox" id="showDetails" onchange="app.toggleShowDetails()"> Show details</label>
-      </div>
+      <button onclick="app.openNewTodoModal()" class="btn-primary">New Todo</button>
     </div>
     <div class="search-area">
       <input type="text" id="searchBox" placeholder="Search..." oninput="app.renderList()" class="input-full">
-      <small class="search-hint">Searches ID, status, content, thread link, tags</small>
+      <small class="search-hint">Searches ID, status, content, main link, tags</small>
     </div>
     {{if .TagGroups}}
-    <div id="tagFilters" class="tag-filters">
-      {{range $g := .TagGroups}}
-      <div class="tag-group" data-group-name="{{$g.Name}}">
-        <span class="tag-group-name">{{$g.Name}}:</span>
-        {{range $g.Tags}}
-        <button class="tag-filter-btn" data-group="{{$g.Name}}" data-tag="{{.}}" onclick="app.toggleTagFilter('{{$g.Name}}', '{{.}}')">{{.}}</button>
+    <div class="filter-collapsible">
+      <button onclick="app.toggleTagFilterPanel()" class="filter-toggle">Filter By Tag <span id="filterToggleArrow">▶</span></button>
+      <div id="tagFilters" class="tag-filters" style="display:none">
+        {{range $g := .TagGroups}}
+        <div class="tag-group" data-group-name="{{$g.Name}}">
+          <span class="tag-group-name">{{$g.Name}}:</span>
+          {{range $g.Tags}}
+          <button class="tag-filter-btn" data-group="{{$g.Name}}" data-tag="{{.}}" onclick="app.toggleTagFilter('{{$g.Name}}', '{{.}}')">{{.}}</button>
+          {{end}}
+        </div>
         {{end}}
+        <div id="tagFilterInfo" class="tag-filter-info"></div>
       </div>
-      {{end}}
-      <div id="tagFilterInfo" class="tag-filter-info"></div>
     </div>
     {{else}}
     <div id="tagFilters" class="tag-filters" style="display:none">
       <div id="tagFilterInfo" class="tag-filter-info"></div>
     </div>
     {{end}}
-    <div id="visibleCount" class="visible-count"></div>
+    <div id="visibleCount" class="visible-count">
+      Showing <span id="countNum">0</span> <span id="countLabel">items</span>.
+      <label class="toggle-label"><input type="checkbox" id="showCompleted" onchange="app.toggleShowCompleted()"> Show completed todos</label>
+      <label class="toggle-label"><input type="checkbox" id="showDetails" onchange="app.toggleShowDetails()"> Show details</label>
+    </div>
     <div id="todoCards"></div>
     <div id="todoEmpty" class="empty-state" style="display:none">No todos yet.</div>
     <div id="todoFilterEmpty" class="empty-state" style="display:none">No items match current filters.</div>
   </div>
 
-  <!-- Todo Result -->
+  <!-- Last Result -->
   <div id="todoResult" class="todo-result">
-    <h3>Todo Result</h3>
-    <div id="resultContent" class="result-content"><em>No actions yet.</em></div>
+    <div class="result-header" onclick="app.toggleResult()">
+      <h3>Last Result</h3>
+      <span id="resultToggleArrow">▶</span>
+    </div>
+    <div id="resultContent" class="result-content" style="display:none"><em>No actions yet.</em></div>
   </div>
 
   <!-- Token Section -->
@@ -90,22 +65,87 @@
   </div>
 </div>
 
-<!-- Thread Link Modal -->
-<div id="threadModal" class="modal-overlay" style="display:none">
+<!-- New Todo Modal -->
+<div id="newTodoModal" class="modal-overlay" style="display:none">
   <div class="modal-content">
     <div class="modal-header">
-      <h3 id="modalTitle">Edit Thread Link</h3>
-      <button class="modal-close" onclick="app.modal.close()">&times;</button>
+      <h3>New Todo</h3>
+      <button class="modal-close" onclick="app.closeNewTodoModal()">&times;</button>
     </div>
     <div class="modal-body">
-      <input type="hidden" id="modalTodoId">
-      <label for="modalThreadLink">Thread Link</label>
-      <input type="text" id="modalThreadLink" placeholder="Thread link URL" class="input-full">
-      <small>Leave empty to clear the thread link.</small>
+      <div class="form-row">
+        <textarea id="newTodoContent" placeholder="What needs to be done?" rows="3" class="input-full"></textarea>
+      </div>
+      <div class="form-row">
+        <input type="text" id="newTodoLink" placeholder="Main link" class="input-full">
+      </div>
+      <div class="form-row form-inline">
+        <input type="datetime-local" id="newTodoSchedule">
+        <div class="quick-offsets" style="display:inline-block">
+          <small><a href="#" onclick="app.quickNewTodoSchedule('+10m');return false">+10m</a> <a href="#" onclick="app.quickNewTodoSchedule('+30m');return false">+30m</a> <a href="#" onclick="app.quickNewTodoSchedule('+1h');return false">+1h</a> <a href="#" onclick="app.quickNewTodoSchedule('+1d');return false">+1d</a></small>
+        </div>
+      </div>
+      {{if .TagGroups}}
+      <div class="add-tags">
+        {{range $g := .TagGroups}}
+        <div class="tag-group">
+          <span class="tag-group-name">{{$g.Name}}:</span>
+          {{range $g.Tags}}
+          <label class="tag-cb-label">
+            <input type="checkbox" class="add-tag-cb" data-group="{{$g.Name}}" value="{{.}}"> {{.}}
+          </label>
+          {{end}}
+        </div>
+        {{end}}
+      </div>
+      {{end}}
     </div>
     <div class="modal-footer">
-      <button onclick="app.modal.close()">Cancel</button>
-      <button onclick="app.modal.save()" class="btn-primary">Save Thread</button>
+      <button onclick="app.closeNewTodoModal()">Cancel</button>
+      <button onclick="app.createTodo()" class="btn-primary">Add Todo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Tags Modal -->
+<div id="editTagsModal" class="modal-overlay" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Edit Tags - #<span id="editTagsTodoId"></span></h3>
+      <button class="modal-close" onclick="app.closeEditTagsModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="edit-tags-section">
+        <h4>Selected Tags</h4>
+        <div id="editTagsSelected" class="edit-tags-selected"></div>
+      </div>
+      <div class="edit-tags-section">
+        <h4>Available Tags</h4>
+        <div id="editTagsAvailable"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button onclick="app.closeEditTagsModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Main Link Modal -->
+<div id="mainLinkModal" class="modal-overlay" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="mainLinkModalTitle">Edit Main Link</h3>
+      <button class="modal-close" onclick="app.mainLinkModal.close()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="mainLinkModalTodoId">
+      <label for="mainLinkModalInput">Main Link</label>
+      <input type="text" id="mainLinkModalInput" placeholder="Main link" class="input-full">
+      <small>Leave empty to clear the main link.</small>
+    </div>
+    <div class="modal-footer">
+      <button onclick="app.mainLinkModal.close()">Cancel</button>
+      <button onclick="app.mainLinkModal.save()" class="btn-primary">Save Main Link</button>
     </div>
   </div>
 </div>

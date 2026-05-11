@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -32,7 +33,8 @@ func RunCLI(args []string) {
 			os.Exit(1)
 		}
 		content := strings.Join(args[1:], " ")
-		t, err := Create(content, "", 0)
+		threadLink := extractURL(content)
+		t, err := Create(content, threadLink, 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			logger.Error("cli add failed", zap.Error(err))
@@ -148,7 +150,8 @@ func RunCLI(args []string) {
 	default:
 		// treat as content to add
 		content := strings.Join(args, " ")
-		t, err := Create(content, "", 0)
+		threadLink := extractURL(content)
+		t, err := Create(content, threadLink, 0)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			logger.Error("cli add (implicit) failed", zap.Error(err))
@@ -209,7 +212,7 @@ func printCLIDetail(tf TodoFull) {
 		fmt.Printf("Scheduled: %s\n", time.Unix(tf.ScheduledAt, 0).Format("2006-01-02 15:04"))
 	}
 	if tf.ThreadLink != "" {
-		fmt.Printf("Thread: %s\n", tf.ThreadLink)
+		fmt.Printf("Main Link: %s\n", tf.ThreadLink)
 	}
 	fmt.Println("---")
 	fmt.Println(tf.Content)
@@ -246,4 +249,10 @@ func parseTimeString(s string) (time.Time, error) {
 	}
 	t, err := time.ParseInLocation("2006-01-02 15:04", s, time.Local)
 	return t, err
+}
+
+func extractURL(s string) string {
+	re := regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://\S+`)
+	match := re.FindString(s)
+	return match
 }

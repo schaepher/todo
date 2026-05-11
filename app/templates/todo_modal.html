@@ -1,11 +1,11 @@
 {{define "todo-modal"}}
-class TodoModal {
+class MainLinkModal {
   constructor(app) {
     this.app = app;
-    this.overlay = document.getElementById('threadModal');
-    this.todoIdInput = document.getElementById('modalTodoId');
-    this.linkInput = document.getElementById('modalThreadLink');
-    this.titleEl = document.getElementById('modalTitle');
+    this.overlay = document.getElementById('mainLinkModal');
+    this.todoIdInput = document.getElementById('mainLinkModalTodoId');
+    this.linkInput = document.getElementById('mainLinkModalInput');
+    this.titleEl = document.getElementById('mainLinkModalTitle');
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onBackdrop = this._onBackdrop.bind(this);
   }
@@ -13,7 +13,7 @@ class TodoModal {
   open(todoId, currentLink) {
     this.todoIdInput.value = todoId;
     this.linkInput.value = currentLink || '';
-    this.titleEl.textContent = 'Edit Thread Link - #' + todoId;
+    this.titleEl.textContent = 'Edit Main Link - #' + todoId;
     this.overlay.style.display = 'flex';
     this.linkInput.focus();
     this.linkInput.select();

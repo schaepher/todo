@@ -75,13 +75,14 @@ State rules:
 - Reopen must preserve prior history rather than creating a fresh unrelated item.
 - Delete must remove the todo and its dependent records.
 
-## 6. Thread Link Requirements
+## 6. Main Link Requirements
 
-- A todo may carry a `thread_link` that points to the related discussion thread.
+- A todo may carry a `thread_link` that points to the related main discussion.
 - `thread_link` may be provided at creation time.
 - `thread_link` may be updated later.
 - `thread_link` may be cleared by saving an empty value.
-- The UI must always render a thread row even when the value is empty.
+- The UI must always render a main link row even when the value is empty.
+- No URL scheme validation is performed; any scheme (`xxx://`) is accepted.
 
 ## 7. Tag Requirements
 
@@ -157,22 +158,23 @@ State rules:
 
 - The Todo page contains the following major sections in order:
   - page header
-  - `Add Todo`
   - `Doing List`
   - `Todo List`
-  - `Todo Result`
+  - `Last Result` — collapsible, hidden by default
 - `Doing List` must appear above `Todo List`.
-- `Todo Result` must show the latest todo-action response.
+- `Last Result` is a collapsible section that shows the latest todo-action response on demand.
 
-### 11.2 Add Todo Section
+### 11.2 New Todo Modal
 
-- The `Add Todo` section must contain a single form.
-- The form must expose these fields:
-  - `Thread Link` text input
+- Adding a todo opens a modal overlay rather than an inline form.
+- The modal must contain a single form with these fields:
   - `Content` multiline textarea
-  - `Auto Start At` datetime-local input
+  - `Main Link` text input (trimmed, no scheme validation)
+  - `Auto Start At` datetime-local input with quick offset buttons (`+10m`, `+30m`, `+1h`, `+1d`)
+- If tag groups are configured, the modal must render tag checkboxes by group for selection at creation time.
 - The form must expose an `Add Todo` submit button.
-- On success, the form resets and the list refreshes.
+- On success, the modal closes, the form resets, and the list refreshes.
+- A `Cancel` button closes the modal without changes.
 
 ### 11.3 Doing List
 
@@ -184,7 +186,8 @@ State rules:
 ### 11.4 Todo List Header and Toggles
 
 - The `Todo List` title must include remains count in the form `Todo List (remains: N)`.
-- The header must expose two toggles:
+- The header must expose a `New Todo` button that opens the New Todo modal.
+- The count line (`Showing N item(s).`) must contain the two toggles inline:
   - `Show completed todos`
   - `Show details`
 - `Show completed todos` controls whether completed items are included from backend data.
@@ -197,12 +200,13 @@ State rules:
 - It must contain:
   - `Search Todo List` search input
   - hint text clarifying that search only filters `Todo List` below
-  - tag-filter panel container
+  - a collapsible tag-filter panel with a `Filter By Tag` toggle button (default collapsed)
+- The tag-filter panel's collapsed/expanded state must be remembered across re-renders in the current session.
 - Search must match the same fields as the current implementation:
   - todo ID
   - status
   - content
-  - thread link
+  - main link
   - tag group names
   - tag values
   - note text
@@ -221,8 +225,9 @@ State rules:
 
 ### 11.6 Todo List Counts and Empty States
 
-- The UI must display a second count line in the form `Showing N item(s).`
+- The UI must display a count line in the form `Showing N item(s).`
 - This visible-item count must reflect the filtered `Todo List`, not the total todo dataset.
+- The `Show completed todos` and `Show details` toggles must appear inline on the same line as the count.
 - Empty-state messages must distinguish:
   - no items in `Doing List`
   - no items in `Todo List`
@@ -236,14 +241,14 @@ State rules:
   - `Created: ...`
   - `Auto Start: ...` when `scheduled_at` exists
   - `Completed: ...` when `completed_at` exists
-  - main content rendered in compact mode
-- If tags exist, the summary must also show a tag row.
-- The summary must always show a thread row with:
-  - `Thread:` label
+  - main content in full (no truncation or line clamp)
+- If tags exist, the summary must also show a tag row with selected tags only (no inline tag editors).
+- The summary must always show a main link row with:
+  - `Main Link:` label
   - current link or empty-state copy
   - `Edit` button
 
-Summary actions must match current behavior:
+Summary actions:
 
 - `open` item:
   - `Start`
@@ -252,7 +257,6 @@ Summary actions must match current behavior:
   - `Delete`
 - `doing` item:
   - `Pause`
-  - `Complete`
   - `Delete`
 - `completed` item:
   - `Reopen`
@@ -260,6 +264,7 @@ Summary actions must match current behavior:
   - `Delete`
 
 - `Details` action is hidden for doing items because they are always expanded.
+- The quick `Complete` action is no longer available on doing items; completion is handled from the details panel.
 
 ### 11.8 Todo Card Details
 
@@ -267,21 +272,25 @@ Summary actions must match current behavior:
 - It must contain, in order:
   - `Tags` section
   - `Notes` section
-  - `Completion Notes` section
-  - `Add Note` form
-  - `Completion Note` form for non-completed items
+  - `Completion Notes` section (when completion notes exist)
+  - `Add Note` form (shared with Complete)
   - schedule or later form depending on state
 
 Tags section requirements:
 
-- Existing tags must render as `[group: tag]` chips in a single row.
-- Each existing tag chip must include a direct remove control.
-- If no tags exist, the section must show an empty-state hint.
-- Below existing tags, configured tag groups must render with:
-  - group name
-  - tag buttons
-- Each tag group's add buttons must be on its own line (separate from the existing-tags row).
-- Already-selected tag buttons must show selected state and remain disabled.
+- Existing tags must render as `[group: tag]` chips in a single row (informational display only, no remove control on chips).
+- If no tags exist, the section must show an empty-state hint (`No tags.`).
+- An `Edit Tags` button opens the Edit Tags modal when tag groups are configured.
+- Tag editing is done entirely through the Edit Tags modal, not inline in the details panel.
+
+Edit Tags modal requirements:
+
+- The modal must display a `Selected Tags` area showing currently assigned tags (informational, no remove button).
+- The modal must display `Available Tags` organized by group with clickable tag buttons.
+- Clicking an unselected available tag adds it to the todo immediately via API.
+- Clicking a selected available tag removes it from the todo immediately via API.
+- No explicit save button is needed; each toggle calls the API directly.
+- The modal content refreshes after each toggle to reflect the updated state.
 
 Notes section requirements:
 
@@ -298,41 +307,41 @@ Notes section requirements:
 ### 11.9 Note and Completion Forms
 
 - `Add Note` form must expose:
-  - multiline textarea
+  - multiline textarea (shared with Complete)
   - `Save Note` button
-- `Completion Note` form must expose:
-  - multiline textarea
   - `Complete Todo` button
-- Summary-level `Complete` must still exist as a quick action with empty note.
+- `Complete Todo` uses the content of the shared textarea as the completion note.
+- There is no separate `Completion Note` form.
+- Summary-level `Complete` on open items must still exist as a quick action with an empty note.
 
 ### 11.10 Schedule and Later Forms
 
 - `open` items must expose an `Auto Start At` form in details.
 - This form must contain:
-  - datetime-local input
-  - hint that empty value clears the schedule
+  - datetime-local input (narrow width, `14rem`)
   - submit button whose label changes between save and update based on current value
-  - quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` that prevent page navigation
+  - quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` placed inline next to the datetime input
+  - hint that empty value clears the schedule
 
 - `doing` items must expose a `Later Until` form in details.
 - This form must contain:
-  - datetime-local input
-  - hint that later moves the todo back to open and auto-starts it at the selected time
+  - datetime-local input (narrow width, `14rem`)
   - `Later` submit button
-  - quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` that prevent page navigation
+  - quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` placed inline next to the datetime input
+  - hint that later moves the todo back to open and auto-starts it at the selected time
 
 - `completed` items must expose neither schedule nor later forms.
 
-### 11.11 Thread Link Modal
+### 11.11 Main Link Modal
 
-- Clicking the summary `Edit` button opens a dedicated thread-link modal.
+- Clicking the summary `Edit` button opens a dedicated main-link modal.
 - The modal must contain:
   - dynamic title including todo ID
   - hidden todo ID field
-  - `Thread Link` text input
+  - `Main Link` text input
   - hint that empty value clears the link
   - `Cancel` button
-  - `Save Thread` button
+  - `Save Main Link` button
   - top-level `Close` button
 - On open, the input must receive focus and its content should be selected.
 - The modal must close when:
@@ -353,8 +362,8 @@ Notes section requirements:
 ## 12. Security and Validation Requirements
 
 - Admin access must be authenticated.
-- Todo content, notes, and thread links must be treated as untrusted input.
-- Thread links must be clearable and validated.
+- Todo content, notes, and main links must be treated as untrusted input.
+- Main links must be clearable.
 - Delete behavior must remain explicit and auditable.
 
 ## 13. Non-Functional Requirements

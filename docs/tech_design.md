@@ -14,7 +14,7 @@ The design principles are:
 
 - local-first storage
 - one shared lifecycle model across all surfaces
-- Admin-first rich operations for search, tags, thread links, and scheduling
+- Admin-first rich operations for search, tags, main links, and scheduling
 - auditable history for all meaningful state and note changes
 - the Admin UI is a first-class operating console rather than a demo page
 - the Admin UI stays lightweight — backend-rendered page plus small amounts of native JavaScript
@@ -58,7 +58,7 @@ JavaScript is organized into five classes, each in its own template file loaded 
 - **TodoApp** — main application class, manages overall state (allTodos, showCompleted, showDetails, selectedTagFilters, _detailStates), coordinates sub-modules, initializes polling
 - **TodoAPI** — API communication class, encapsulates all fetch calls, token management, unified response parsing
 - **TodoRenderer** — rendering class, handles renderList, renderCard, renderDetails and DOM operations
-- **TodoModal** — modal class, manages thread link modal open/close/submit
+- **MainLinkModal** — modal class, manages main link modal open/close/submit
 - **TodoToast** — toast notification class, displays success/error feedback
 
 Each class is defined in its own `{{define "..."}}` template block in `templates/todo_*.html` and included via `{{template}}` directives in `script.html`.
@@ -95,7 +95,7 @@ API --> Browser : list or refreshed item
 | Todo | A local work item tracked by content, state, timestamps, tags, and history |
 | Note | A progress or context record that does not complete the todo |
 | Completion Note | A note captured as part of completion |
-| Thread Link | A URL pointing to the discussion thread related to the todo |
+| Main Link | A URL pointing to the main discussion related to the todo |
 | Tag Group | A configured group that exposes candidate tags |
 | Schedule Time | A future local datetime after which an open todo becomes eligible for auto-start |
 | Later | A deferred-work action that moves a doing todo back to open and assigns its next schedule time |
@@ -113,7 +113,7 @@ API --> Browser : list or refreshed item
 | `todo` | `content` | Main work description | Trimmed, non-empty |
 | `todo` | `status` | Lifecycle state | `open`, `doing`, `completed` |
 | `todo` | `created_at` | Creation time | Immutable |
-| `todo` | `thread_link` | Related discussion URL | Optional, clearable |
+| `todo` | `thread_link` | Related main link URL | Optional, clearable |
 | `todo` | `scheduled_at` | Next eligible auto-start time | `0` means unset |
 | `todo` | `completed_at` | Completion time | `0` when not completed |
 | `todo_log` | `todo_id` | Owning todo | Required |
@@ -345,7 +345,7 @@ The Admin API serves both the Admin web UI and external local integrations. It r
 | `POST /admin/api/todos` | Create todo | `content`, optional `thread_link`, optional `schedule_at` | `success`, `message`, refreshed `item` |
 | `POST /admin/api/todos/{id}/note` | Add note | `note` | `success`, `message`, refreshed `item` |
 | `DELETE /admin/api/todos/{id}/notes/{log_id}` | Delete note body | none | `success`, `message`, refreshed `item` |
-| `POST /admin/api/todos/{id}/thread` | Set or clear thread link | `thread_link` | `success`, `message`, refreshed `item` |
+| `POST /admin/api/todos/{id}/thread` | Set or clear main link | `thread_link` | `success`, `message`, refreshed `item` |
 | `POST /admin/api/todos/{id}/tags` | Add tag | `group_name`, `tag` | `success`, `message`, refreshed `item` |
 | `DELETE /admin/api/todos/{id}/tags/{tag_id}` | Remove tag | none | `success`, `message`, refreshed `item` |
 | `POST /admin/api/todos/{id}/schedule` | Set, update, or clear schedule | `schedule_at` | `success`, `message`, refreshed `item` |
@@ -372,22 +372,22 @@ The Admin UI is the primary rich interaction surface. It is server-rendered with
 The Todo page contains the following major sections in order:
 
 1. Page header
-2. Add Todo section
-3. Doing List section
-4. Todo List section
-5. Todo Result section — shows the latest todo-action response
+2. Doing List section
+3. Todo List section
+4. Last Result section — collapsible, hidden by default, shows the latest todo-action response
 
-Doing List must appear above Todo List.
+Doing List must appear above Todo List. Creating a todo is done via a New Todo modal triggered by a button in the Todo List header.
 
 ### 12.2 Add Todo Section
 
-A single form with the following fields:
+A modal overlay with the following fields:
 
-- `Thread Link` text input
 - `Content` multiline textarea
-- `Auto Start At` datetime-local input
+- `Main Link` text input (trimmed, no scheme validation)
+- `Auto Start At` datetime-local input with quick offset buttons (`+10m`, `+30m`, `+1h`, `+1d`)
+- Tag checkboxes organized by group when tag groups are configured
 
-An `Add Todo` submit button. On success, the form resets and the list refreshes.
+On success, the modal closes, the form resets, and the list refreshes. A `Cancel` button closes the modal without changes.
 
 ### 12.3 Doing List
 
@@ -397,7 +397,9 @@ Doing items are rendered in a dedicated list above the main Todo List. They are 
 
 The section title uses the format `Todo List (remains: N)` where N is the count of open (non-doing, non-completed) items.
 
-The header exposes two toggles:
+The header exposes a **New Todo** button.
+
+Two toggles are placed inline on the count line (`Showing N item(s).`):
 
 - **Show completed todos** — controls whether completed items are included from backend data.
 - **Show details** — expands all non-doing cards. Doing items remain expanded regardless of this toggle.
@@ -408,11 +410,11 @@ The search area appears above the main Todo List and contains:
 
 - `Search Todo List` search input
 - a hint text clarifying that search only filters the Todo List below
-- a tag-filter panel container
+- a collapsible tag-filter panel with a `Filter By Tag` toggle button (default collapsed)
 
-Search matches the following fields: todo ID, status, content, thread link, tag group names, tag values, note text, note kind, note timestamp text, completion-note text, completion-note kind, completion-note timestamp text.
+The tag-filter panel state is remembered in the session (`_tagFilterPanelOpen`). Search matches the following fields: todo ID, status, content, main link, tag group names, tag values, note text, note kind, note timestamp text, completion-note text, completion-note kind, completion-note timestamp text.
 
-The tag-filter panel appears only when configured tag groups exist. Each tag group must be rendered on its own line. When no filter is active, the panel explains that configured tags can narrow the list. When filters are active, the panel shows:
+When expanded, the tag-filter panel appears only when configured tag groups exist. Each tag group must be rendered on its own line. When no filter is active, the panel explains that configured tags can narrow the list. When filters are active, the panel shows:
 
 - active tag-filter count
 - explanation that same-group selections behave as OR
@@ -439,19 +441,19 @@ Each todo card summary shows:
 - `Created: ...`
 - `Auto Start: ...` when `scheduled_at` exists
 - `Completed: ...` when `completed_at` exists
-- main content rendered in compact mode
-- if tags exist, a tag row
-- a thread row with `Thread:` label, current link or empty-state copy, and an `Edit` button
+- main content in full (no truncation)
+- if tags exist, a tag row showing selected tag chips (informational only)
+- a main link row with `Main Link:` label, current link or empty-state copy, and an `Edit` button
 
 Summary actions per state:
 
 | State | Actions |
 | --- | --- |
 | `open` | `Start`, `Complete`, optional `Details`, `Delete` |
-| `doing` | `Pause`, `Complete`, `Delete` |
+| `doing` | `Pause`, `Delete` |
 | `completed` | `Reopen`, optional `Details`, `Delete` |
 
-`Details` is hidden for doing items because they are always expanded.
+`Details` is hidden for doing items because they are always expanded. The quick `Complete` action is removed from doing items; completion is handled from the details panel.
 
 ### 12.8 Todo Card Details
 
@@ -459,14 +461,15 @@ The details area renders below the summary in this order:
 
 1. Tags section
 2. Notes section
-3. Completion Notes section
-4. Add Note form
-5. Completion Note form (for non-completed items)
-6. Schedule or Later form depending on state
+3. Completion Notes section (when completion notes exist)
+4. Add Note form (shared with Complete action)
+5. Schedule or Later form depending on state
 
 #### Tags Section
 
-Existing tags render as `[group: tag]` chips in a single row, each with a direct remove control. If no tags exist, the section shows an empty-state hint. Below existing tags, configured tag groups render with their group name and tag buttons; each group's add buttons are placed on its own line, separate from the existing-tags row. Already-selected tag buttons show a selected state and remain disabled.
+Existing tags render as `[group: tag]` chips in a single row (informational display only, no inline remove control). If no tags exist, the section shows `No tags.`. An `Edit Tags` button opens the **Edit Tags modal** when tag groups are configured.
+
+The Edit Tags modal displays a **Selected Tags** area (informational, no remove button) and an **Available Tags** area organized by group. Available tag buttons toggle on click: selecting an unselected tag calls the add-tag API; deselecting a selected tag calls the remove-tag API. Changes are instant (no save button), and the modal content refreshes after each toggle.
 
 #### Notes Section
 
@@ -474,26 +477,27 @@ Regular notes show timestamp text, kind text, and rendered note body. Notes are 
 
 ### 12.9 Note and Completion Forms
 
-- **Add Note form**: a multiline textarea and a `Save Note` button.
-- **Completion Note form**: a multiline textarea and a `Complete Todo` button.
-- The summary-level `Complete` quick action still works with an empty note.
+- **Add Note form**: a multiline textarea, a `Save Note` button, and a `Complete Todo` button.
+- `Complete Todo` uses the content of the shared textarea as the completion note.
+- There is no separate `Completion Note` form.
+- The summary-level `Complete` quick action on open items still works with an empty note.
 
 ### 12.10 Schedule and Later Forms
 
-- **open items** — `Auto Start At` form with a datetime-local input, a hint that an empty value clears the schedule, a submit button whose label changes between "Save" and "Update" based on whether a schedule already exists, and quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` that prevent page navigation.
-- **doing items** — `Later Until` form with a datetime-local input, a hint that later moves the todo back to open and auto-starts it at the selected time, a `Later` submit button, and quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` that prevent page navigation.
+- **open items** — `Auto Start At` form with a narrow datetime-local input (`14rem`), a submit button whose label changes between "Save" and "Update" based on whether a schedule already exists, quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` placed inline next to the input, and a hint that an empty value clears the schedule.
+- **doing items** — `Later Until` form with a narrow datetime-local input (`14rem`), a `Later` submit button, quick offset buttons `+10m`, `+30m`, `+1h`, `+1d` placed inline next to the input, and a hint that later moves the todo back to open and auto-starts it at the selected time.
 - **completed items** — neither schedule nor later forms are shown.
 
-### 12.11 Thread Link Modal
+### 12.11 Main Link Modal
 
-Clicking the `Edit` button in the summary thread row opens a dedicated modal. The modal contains:
+Clicking the `Edit` button in the summary main link row opens a dedicated modal. The modal contains:
 
 - dynamic title including the todo ID
 - hidden todo ID field
-- `Thread Link` text input
+- `Main Link` text input
 - hint that an empty value clears the link
 - `Cancel` button
-- `Save Thread` button
+- `Save Main Link` button
 - top-level `Close` button
 
 On open, the input receives focus and its content is selected. The modal closes when: clicking the backdrop, pressing `Escape`, clicking `Close`, clicking `Cancel`, or after a successful save.
@@ -524,8 +528,8 @@ The server process is managed through a Makefile with start, stop, and restart t
 ## 14. Security
 
 - Admin access requires one authenticated Admin boundary.
-- Todo content, note content, and thread links are treated as untrusted input.
-- Thread links must be clearable and validated.
+- Todo content, note content, and main links are treated as untrusted input.
+- Main links must be clearable.
 - UI rendering must escape or safely render all operator-provided text.
 - Delete requires explicit operator intent and clear success feedback.
 

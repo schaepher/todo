@@ -1,6 +1,6 @@
 todo.exe
 todo
-.claude
+*.local.json
 
 # air
 tmp

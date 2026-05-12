@@ -252,7 +252,7 @@ func parseTimeString(s string) (time.Time, error) {
 }
 
 func extractURL(s string) string {
-	re := regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*://\S+`)
+	re := regexp.MustCompile(`https?://\S+`)
 	match := re.FindString(s)
 	return match
 }

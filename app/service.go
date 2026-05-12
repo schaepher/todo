@@ -3,11 +3,27 @@ package app
 import (
 	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 	"todo/db"
 	pkglog "todo/pkg/log"
 	"go.uber.org/zap"
 )
+
+func safeURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	if !strings.HasPrefix(u.Scheme, "http") {
+		return ""
+	}
+	return rawURL
+}
 
 type TodoFull struct {
 	db.Todo
@@ -43,6 +59,7 @@ func Create(content, threadLink string, scheduleAt int64) (*TodoFull, error) {
 		logger.Error("Create: empty content")
 		return nil, err
 	}
+	threadLink = safeURL(threadLink)
 	t, err := db.CreateTodo(content, threadLink, scheduleAt)
 	if err != nil {
 		logger.Error("Create: db create failed", zap.Error(err))
@@ -173,6 +190,7 @@ func SetThreadLink(id int64, link string) (*TodoFull, error) {
 		logger.Error("SetThreadLink: todo not found", zap.Int64("id", id), zap.Error(err))
 		return nil, errors.New("not found")
 	}
+	link = safeURL(link)
 	if err := db.SetThreadLink(id, link); err != nil {
 		logger.Error("SetThreadLink: db error", zap.Int64("id", id), zap.Error(err))
 		return nil, err

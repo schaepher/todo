@@ -140,9 +140,18 @@ class TodoRenderer {
         ).join('') + '</div>';
     }
 
+    function safeURL(url) {
+      if (!url) return '';
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+        return url;
+      } catch (_) { return ''; }
+    }
     const threadVal = todo.thread_link || '';
-    const threadHtml = threadVal
-      ? '<a href="' + escapeHtml(threadVal) + '" class="thread-link" target="_blank" rel="noopener">' + escapeHtml(threadVal) + '</a>'
+    const threadSafe = safeURL(threadVal);
+    const threadHtml = threadSafe
+      ? '<a href="' + escapeHtml(threadSafe) + '" class="thread-link" target="_blank" rel="noopener">' + escapeHtml(threadSafe) + '</a>'
       : '<span class="thread-empty">No main link</span>';
 
     const showDetailPanel = expanded || showDetails || this.app._detailStates[todo.id];

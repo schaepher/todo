@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"strings"
 	"todo/config"
 	pkglog "todo/pkg/log"
 	"go.uber.org/zap"
@@ -24,6 +25,7 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 
 	tagGroups := buildTagGroupView()
 	tagGroupsJSON, _ := json.Marshal(tagGroups)
+	safeJSON := strings.ReplaceAll(string(tagGroupsJSON), "</", "\\u003C/")
 
 	data := struct {
 		Token          string
@@ -32,7 +34,7 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	}{
 		Token:          config.Get().TokenValue(),
 		TagGroups:      tagGroups,
-		TagGroupsJSON:  template.JS(tagGroupsJSON),
+		TagGroupsJSON:  template.JS(safeJSON),
 	}
 	err := tmpl.ExecuteTemplate(w, "layout.html", data)
 	if err != nil {

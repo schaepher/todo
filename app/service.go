@@ -10,6 +10,12 @@ import (
 	pkglog "todo/pkg/log"
 	"go.uber.org/zap"
 )
+const (
+	maxContentLen = 10000
+	maxThreadLen  = 2048
+	maxNoteLen    = 5000
+	maxTagNameLen = 100
+)
 
 func safeURL(rawURL string) string {
 	if rawURL == "" {
@@ -58,6 +64,12 @@ func Create(content, threadLink string, scheduleAt int64) (*TodoFull, error) {
 		err := errors.New("content required")
 		logger.Error("Create: empty content")
 		return nil, err
+	}
+	if len(content) > maxContentLen {
+		return nil, fmt.Errorf("content too long (max %d chars)", maxContentLen)
+	}
+	if len(threadLink) > maxThreadLen {
+		threadLink = threadLink[:maxThreadLen]
 	}
 	threadLink = safeURL(threadLink)
 	t, err := db.CreateTodo(content, threadLink, scheduleAt)
@@ -156,6 +168,10 @@ func AddNote(id int64, note string) (*TodoFull, error) {
 		logger.Error("AddNote: empty note", zap.Int64("id", id))
 		return nil, err
 	}
+	if len(note) > maxNoteLen {
+		return nil, fmt.Errorf("note too long (max %d chars)", maxNoteLen)
+	}
+	
 	t, err := db.GetTodo(id)
 	if err != nil || t == nil {
 		logger.Error("AddNote: todo not found", zap.Int64("id", id), zap.Error(err))
@@ -190,6 +206,10 @@ func SetThreadLink(id int64, link string) (*TodoFull, error) {
 		logger.Error("SetThreadLink: todo not found", zap.Int64("id", id), zap.Error(err))
 		return nil, errors.New("not found")
 	}
+	if len(link) > maxThreadLen {
+		link = link[:maxThreadLen]
+	}
+
 	link = safeURL(link)
 	if err := db.SetThreadLink(id, link); err != nil {
 		logger.Error("SetThreadLink: db error", zap.Int64("id", id), zap.Error(err))
@@ -210,6 +230,10 @@ func AddTagToTodo(id int64, group, tag string) (*TodoFull, error) {
 		logger.Error("AddTag: missing group/tag", zap.Int64("id", id))
 		return nil, err
 	}
+	if len(group) > maxTagNameLen || len(tag) > maxTagNameLen {
+		return nil, fmt.Errorf("tag name too long (max %d chars)", maxTagNameLen)
+	}
+
 	if err := db.AddTag(id, group, tag); err != nil {
 		logger.Error("AddTag: db error", zap.Int64("id", id), zap.Error(err))
 		return nil, errors.New("failed to add tag")

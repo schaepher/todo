@@ -43,9 +43,11 @@ func startServer(cfg *config.Config, logger *zap.Logger) {
 	app.SetupUIRoutes(mux)
 	app.StartWorker()
 
+	handler := app.SecurityHeadersMiddleware(mux)
+
 	addr := fmt.Sprintf(":%d", cfg.Port)
 	logger.Info("starting admin server", zap.String("addr", addr))
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		logger.Fatal("server error", zap.Error(err))
 	}
 }

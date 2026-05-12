@@ -35,7 +35,7 @@ func RefreshFull(id int64) (*TodoFull, error) {
 	t, err := db.GetTodo(id)
 	if err != nil {
 		pkglog.GetLogger(nil).Error("RefreshFull: get todo failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to load todo")
 	}
 	if t == nil {
 		return nil, errors.New("not found")
@@ -63,7 +63,7 @@ func Create(content, threadLink string, scheduleAt int64) (*TodoFull, error) {
 	t, err := db.CreateTodo(content, threadLink, scheduleAt)
 	if err != nil {
 		logger.Error("Create: db create failed", zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to create todo")
 	}
 	return RefreshFull(t.ID)
 }
@@ -82,7 +82,7 @@ func Start(id int64) (*TodoFull, error) {
 	}
 	if err := db.UpdateStatus(id, "doing", 0, 0); err != nil {
 		logger.Error("Start: update status failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to update status")
 	}
 	_, _ = db.AddLog(id, "start", "")
 	return RefreshFull(id)
@@ -102,7 +102,7 @@ func Pause(id int64) (*TodoFull, error) {
 	}
 	if err := db.UpdateStatus(id, "open", 0, 0); err != nil {
 		logger.Error("Pause: update status failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to update status")
 	}
 	_, _ = db.AddLog(id, "pause", "")
 	return RefreshFull(id)
@@ -123,7 +123,7 @@ func Complete(id int64, note string) (*TodoFull, error) {
 	now := time.Now().Unix()
 	if err := db.UpdateStatus(id, "completed", 0, now); err != nil {
 		logger.Error("Complete: update status failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to update status")
 	}
 	_, _ = db.AddLog(id, "complete", note)
 	return RefreshFull(id)
@@ -143,7 +143,7 @@ func Reopen(id int64) (*TodoFull, error) {
 	}
 	if err := db.UpdateStatus(id, "open", 0, 0); err != nil {
 		logger.Error("Reopen: update status failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to update status")
 	}
 	_, _ = db.AddLog(id, "reopen", "")
 	return RefreshFull(id)
@@ -164,7 +164,7 @@ func AddNote(id int64, note string) (*TodoFull, error) {
 	_, err = db.AddLog(id, "note", note)
 	if err != nil {
 		logger.Error("AddNote: add log failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to add note")
 	}
 	return RefreshFull(id)
 }
@@ -178,7 +178,7 @@ func DeleteNote(id, logID int64) (*TodoFull, error) {
 	}
 	if err := db.DeleteLog(logID); err != nil {
 		logger.Error("DeleteNote: delete log failed", zap.Int64("log_id", logID), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to delete note")
 	}
 	return RefreshFull(id)
 }
@@ -193,7 +193,7 @@ func SetThreadLink(id int64, link string) (*TodoFull, error) {
 	link = safeURL(link)
 	if err := db.SetThreadLink(id, link); err != nil {
 		logger.Error("SetThreadLink: db error", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to set thread link")
 	}
 	return RefreshFull(id)
 }
@@ -212,7 +212,7 @@ func AddTagToTodo(id int64, group, tag string) (*TodoFull, error) {
 	}
 	if err := db.AddTag(id, group, tag); err != nil {
 		logger.Error("AddTag: db error", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to add tag")
 	}
 	return RefreshFull(id)
 }
@@ -226,7 +226,7 @@ func RemoveTagFromTodo(id, tagID int64) (*TodoFull, error) {
 	}
 	if err := db.RemoveTag(tagID); err != nil {
 		logger.Error("RemoveTag: db error", zap.Int64("tag_id", tagID), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to remove tag")
 	}
 	return RefreshFull(id)
 }
@@ -245,7 +245,7 @@ func SetSchedule(id int64, scheduleAt int64) (*TodoFull, error) {
 	}
 	if err := db.UpdateStatus(id, "open", scheduleAt, 0); err != nil {
 		logger.Error("SetSchedule: update failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to update schedule")
 	}
 	if scheduleAt > 0 {
 		_, _ = db.AddLog(id, "schedule", fmt.Sprintf("set to %s", time.Unix(scheduleAt, 0).Format("2006-01-02 15:04")))
@@ -274,7 +274,7 @@ func Later(id int64, scheduleAt int64) (*TodoFull, error) {
 	}
 	if err := db.UpdateStatus(id, "open", scheduleAt, 0); err != nil {
 		logger.Error("Later: update failed", zap.Int64("id", id), zap.Error(err))
-		return nil, err
+		return nil, errors.New("failed to update schedule")
 	}
 	_, _ = db.AddLog(id, "later", fmt.Sprintf("postponed to %s", time.Unix(scheduleAt, 0).Format("2006-01-02 15:04")))
 	return RefreshFull(id)
@@ -284,6 +284,7 @@ func Delete(id int64) error {
 	err := db.DeleteTodo(id)
 	if err != nil {
 		pkglog.GetLogger(nil).Error("Delete: failed", zap.Int64("id", id), zap.Error(err))
+		return errors.New("failed to delete todo")
 	}
-	return err
+	return nil
 }

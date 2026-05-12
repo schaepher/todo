@@ -40,7 +40,7 @@ func handleTodos(w http.ResponseWriter, r *http.Request) {
 		todos, err := db.ListTodos(inc)
 		if err != nil {
 			logger.Error("api list todos failed", zap.Error(err))
-			apiError(w, err.Error(), 500)
+			apiError(w, "failed to list todos", 500)
 			return
 		}
 		type listItem struct {

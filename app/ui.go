@@ -28,11 +28,9 @@ func handleAdminPage(w http.ResponseWriter, r *http.Request) {
 	safeJSON := strings.ReplaceAll(string(tagGroupsJSON), "</", "\\u003C/")
 
 	data := struct {
-		Token          string
 		TagGroups      []TagGroupView
 		TagGroupsJSON  template.JS
 	}{
-		Token:          config.Get().TokenValue(),
 		TagGroups:      tagGroups,
 		TagGroupsJSON:  template.JS(safeJSON),
 	}

@@ -11,6 +11,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const maxBodySize = 1 << 20 // 1 MB
+
 func SetupAPIRoutes(mux *http.ServeMux) {
 	api := http.NewServeMux()
 	api.HandleFunc("/admin/api/todos", handleTodos)
@@ -62,6 +64,7 @@ func handleTodos(w http.ResponseWriter, r *http.Request) {
 			ScheduleAt int64         `json:"schedule_at"`
 			Tags       []db.TagInput `json:"tags"`
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			logger.Error("api create: invalid json", zap.Error(err))
 			apiError(w, "invalid json", 400)
@@ -122,6 +125,7 @@ func handleTodoByID(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				Note string `json:"note"`
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 			json.NewDecoder(r.Body).Decode(&req)
 			tf, err := AddNote(id, req.Note)
 			if err != nil {
@@ -155,6 +159,7 @@ func handleTodoByID(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				ThreadLink string `json:"thread_link"`
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 			json.NewDecoder(r.Body).Decode(&req)
 			tf, err := SetThreadLink(id, req.ThreadLink)
 			if err != nil {
@@ -181,6 +186,7 @@ func handleTodoByID(w http.ResponseWriter, r *http.Request) {
 				GroupName string `json:"group_name"`
 				Tag       string `json:"tag"`
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 			json.NewDecoder(r.Body).Decode(&req)
 			tf, err := AddTagToTodo(id, req.GroupName, req.Tag)
 			if err != nil {
@@ -197,6 +203,7 @@ func handleTodoByID(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				ScheduleAt int64 `json:"schedule_at"`
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 			json.NewDecoder(r.Body).Decode(&req)
 			tf, err := SetSchedule(id, req.ScheduleAt)
 			if err != nil {
@@ -213,6 +220,7 @@ func handleTodoByID(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				ScheduleAt int64 `json:"schedule_at"`
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 			json.NewDecoder(r.Body).Decode(&req)
 			tf, err := Later(id, req.ScheduleAt)
 			if err != nil {
@@ -265,6 +273,7 @@ func handleTodoByID(w http.ResponseWriter, r *http.Request) {
 			var req struct {
 				Note string `json:"note"`
 			}
+			r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 			json.NewDecoder(r.Body).Decode(&req)
 			tf, err := Complete(id, req.Note)
 			if err != nil {
@@ -299,6 +308,7 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Token string `json:"token"`
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		logger.Error("token api: invalid json", zap.Error(err))
 		apiError(w, "invalid json", 400)

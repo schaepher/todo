@@ -1,6 +1,9 @@
 package config
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +21,8 @@ type TagGroup struct {
 
 type Config struct {
 	Port           int        `yaml:"port"`
-	Token          string     `yaml:"token"`
+	Token          string     `yaml:"token,omitempty"`      // kept for one-time migration to TokenHash
+	TokenHash      string     `yaml:"token_hash,omitempty"` // SHA-256 hex of the bearer token
 	TagGroups      []TagGroup `yaml:"tag_groups"`
 	WorkerInterval int        `yaml:"worker_interval"` // seconds, default 30
 	mu             sync.RWMutex
@@ -75,6 +79,15 @@ func Load() (*Config, error) {
 	if c.WorkerInterval <= 0 {
 		c.WorkerInterval = 30
 	}
+	if c.TokenHash == "" && c.Token != "" {
+		logger.Info("migrating plaintext token to hash")
+		hash := sha256.Sum256([]byte(c.Token))
+		c.TokenHash = hex.EncodeToString(hash[:])
+		c.Token = ""
+		if err := c.Save(); err != nil {
+			logger.Error("failed to persist token hash migration", zap.Error(err))
+		}
+	}
 	cfg = c
 	return c, nil
 }
@@ -83,17 +96,33 @@ func Get() *Config {
 	return cfg
 }
 
+func (c *Config) HasToken() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.TokenHash != ""
+}
+
+func (c *Config) VerifyToken(token string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.TokenHash == "" {
+		return true
+	}
+	hash := sha256.Sum256([]byte(token))
+	expected, err := hex.DecodeString(c.TokenHash)
+	if err != nil {
+		return false
+	}
+	return subtle.ConstantTimeCompare(hash[:], expected) == 1
+}
+
 func (c *Config) SetToken(token string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.Token = token
+	hash := sha256.Sum256([]byte(token))
+	c.TokenHash = hex.EncodeToString(hash[:])
+	c.Token = ""
 	return c.Save()
-}
-
-func (c *Config) TokenValue() string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.Token
 }
 
 func (c *Config) Save() error {
@@ -114,7 +143,6 @@ func (c *Config) Save() error {
 func defaultConfig() *Config {
 	return &Config{
 		Port:           8080,
-		Token:          "",
 		TagGroups:      []TagGroup{},
 		WorkerInterval: 30,
 	}

@@ -296,10 +296,9 @@ func handleToken(w http.ResponseWriter, r *http.Request) {
 		apiError(w, "method not allowed", 405)
 		return
 	}
-	currentToken := config.Get().TokenValue()
-	if currentToken != "" {
+	if config.Get().HasToken() {
 		authHeader := r.Header.Get("Authorization")
-		if !strings.HasPrefix(authHeader, "Bearer ") || strings.TrimPrefix(authHeader, "Bearer ") != currentToken {
+		if !strings.HasPrefix(authHeader, "Bearer ") || !config.Get().VerifyToken(strings.TrimPrefix(authHeader, "Bearer ")) {
 			logger.Warn("unauthorized token change attempt")
 			apiError(w, "unauthorized", http.StatusUnauthorized)
 			return

@@ -21,8 +21,7 @@ func SecurityHeadersMiddleware(next http.Handler) http.Handler {
 
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := config.Get().TokenValue()
-		if token == "" {
+		if !config.Get().HasToken() {
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxAuthKey, true)))
 			return
 		}
@@ -31,7 +30,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if strings.TrimPrefix(authHeader, "Bearer ") != token {
+		if !config.Get().VerifyToken(strings.TrimPrefix(authHeader, "Bearer ")) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

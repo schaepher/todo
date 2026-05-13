@@ -123,7 +123,7 @@ func AddLog(todoID int64, action, note string) (int64, error) {
 }
 
 func DeleteLog(logID int64) error {
-	_, err := DB.Exec(`UPDATE todo_logs SET note='' WHERE id=?`, logID)
+	_, err := DB.Exec(`DELETE FROM todo_logs WHERE id=?`, logID)
 	if err != nil {
 		pkglog.GetLogger(nil).Error("delete log failed", zap.Int64("log_id", logID), zap.Error(err))
 	}
